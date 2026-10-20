@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+*.db
+*.sqlite3
+
+# Node / Frontend
+node_modules/
+dist/
+
+# Storage binaries
+backend/app/storage/models/*
+!backend/app/storage/models/.gitkeep
+backend/app/storage/datasets/*
+!backend/app/storage/datasets/.gitkeep
