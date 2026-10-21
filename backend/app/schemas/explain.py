@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Optional
 from pydantic import BaseModel
 
 class FeatureContribution(BaseModel):
@@ -13,6 +13,8 @@ class InstanceExplainRequest(BaseModel):
 class InstanceExplainResponse(BaseModel):
     model_id: int
     prediction: float
+    predicted_class: Optional[str] = None
+    probabilities: Optional[Dict[str, float]] = None
     base_value: float
     feature_contributions: List[FeatureContribution]
 

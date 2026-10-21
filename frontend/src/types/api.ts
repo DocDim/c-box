@@ -32,6 +32,8 @@ export interface FeatureContribution {
 export interface InstanceExplainResponse {
   model_id: number;
   prediction: number;
+  predicted_class?: string;
+  probabilities?: Record<string, number>;
   base_value: number;
   feature_contributions: FeatureContribution[];
 }

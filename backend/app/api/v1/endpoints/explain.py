@@ -26,7 +26,7 @@ async def explain_instance(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Generates local SHAP feature attributions for a single instance."""
+    """Generates local SHAP feature attributions and predictions for a single instance."""
     model_record = await verify_model_access(
         payload.model_id, current_user, db, min_role=AccessRole.EXPLAINER
     )
@@ -45,6 +45,8 @@ async def explain_instance(
     return InstanceExplainResponse(
         model_id=model_record.id,
         prediction=result["prediction"],
+        predicted_class=result.get("predicted_class"),
+        probabilities=result.get("probabilities"),
         base_value=result["base_value"],
         feature_contributions=result["feature_contributions"]
     )
