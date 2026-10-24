@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../../types/api';
 import { authService } from '../../services/api';
-import { ShieldCheck, LogIn, LogOut, User as UserIcon } from 'lucide-react';
+import { LogIn, LogOut, User as UserIcon } from 'lucide-react';
 
 interface NavbarProps {
   user: User | null;
@@ -40,7 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onAuthSuccess, onLogout })
   return (
     <>
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="px-6 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="h-9 w-9 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-md">
               CB

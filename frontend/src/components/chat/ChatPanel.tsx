@@ -1,0 +1,194 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Bot, Send, ShieldAlert, ShieldCheck, Sparkles, User as UserIcon } from 'lucide-react';
+import { ChatMessage, Faithfulness } from '../../types/api';
+import { errorMessage, explainService } from '../../services/api';
+import { fmtMs } from '../../utils/format';
+import { renderMarkdown } from '../../utils/markdown';
+
+interface ChatPanelProps {
+  explanationId: string;
+  llmLabel?: string;
+}
+
+const FaithfulnessBadge: React.FC<{ f: Faithfulness; kind: string }> = ({ f, kind }) => {
+  const ok = !f.fabricated && !f.direction_errors;
+  return (
+    <div className={`mt-2 text-[10px] rounded-md px-2 py-1 border flex flex-wrap items-center gap-x-3 gap-y-1 ${
+      ok ? 'border-emerald-800 bg-emerald-950/40 text-emerald-300' : 'border-amber-700 bg-amber-950/40 text-amber-300'
+    }`}>
+      <span className="flex items-center gap-1 font-semibold">
+        {ok ? <ShieldCheck size={12} /> : <ShieldAlert size={12} />}
+        {f.fabricated
+          ? `Unverified numbers: ${f.unverified_numbers.join(', ')}`
+          : f.direction_errors ? 'Numbers grounded, but factor directions are wrong' : 'All numbers and directions grounded in SHAP context'}
+      </span>
+      {f.misplaced_features && f.misplaced_features.length > 0 && (
+        <span className="basis-full">
+          Wrong section: {f.misplaced_features.map((m) => `${m.feature} (actually ${m.actual_effect})`).join('; ')}
+        </span>
+      )}
+      <span>{f.numbers_verified}/{f.numbers_checked} numbers verified</span>
+      <span>{f.features_mentioned.length}/{f.features_in_context} key features cited</span>
+      {kind === 'narrative' && f.sections_found && (
+        <span>{f.sections_found.length}/4 sections{f.structure_complete ? '' : ' (incomplete)'}</span>
+      )}
+    </div>
+  );
+};
+
+export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 'Gemma via Ollama' }) => {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [streamingText, setStreamingText] = useState<string | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [error, setError] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  const run = async (question?: string) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setError('');
+    setStreamingText('');
+    setPendingQuestion(question ?? null);
+    try {
+      const final = await explainService.chatStream(
+        explanationId, question, (t) => setStreamingText((prev) => (prev ?? '') + t), controller.signal
+      );
+      setMessages((prev) => {
+        const next = [...prev];
+        if (question) {
+          next.push({
+            id: -Date.now(), role: 'user', kind: 'followup', content: question, created_at: new Date().toISOString(),
+          });
+        }
+        if (!next.some((m) => m.id === final.id)) next.push(final);
+        return next;
+      });
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') setError(errorMessage(err, 'LLM request failed.'));
+    } finally {
+      if (abortRef.current === controller) {
+        setStreamingText(null);
+        setPendingQuestion(null);
+      }
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setMessages([]);
+    setError('');
+    explainService
+      .getConversation(explanationId)
+      .then((conv) => {
+        if (cancelled) return;
+        setMessages(conv.messages);
+        if (!conv.messages.some((m) => m.kind === 'narrative')) run();
+      })
+      .catch((err) => !cancelled && setError(errorMessage(err)));
+    return () => {
+      cancelled = true;
+      abortRef.current?.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [explanationId]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [messages, streamingText]);
+
+  const busy = streamingText !== null;
+  const hasNarrative = messages.some((m) => m.kind === 'narrative');
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = query.trim();
+    if (!q || busy) return;
+    setQuery('');
+    run(q);
+  };
+
+  return (
+    <div className="bg-slate-800/80 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col h-full min-h-[28rem]">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-700 mb-3">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Bot size={18} className="text-indigo-400" />
+          Grounded AI Narrative
+        </h3>
+        <span className="text-[11px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded">
+          {llmLabel}
+        </span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto space-y-4 pr-1 max-h-[36rem]">
+        {messages.map((m) => (
+          <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : ''}>
+            {m.role === 'user' ? (
+              <div className="max-w-[85%] bg-indigo-600/30 border border-indigo-700 rounded-lg px-3 py-2 text-xs text-indigo-100 flex gap-2">
+                <UserIcon size={14} className="shrink-0 mt-0.5" /> {m.content}
+              </div>
+            ) : (
+              <div className="text-xs leading-relaxed text-slate-200">
+                {renderMarkdown(m.content)}
+                {m.faithfulness && <FaithfulnessBadge f={m.faithfulness} kind={m.kind} />}
+                <div className="text-[10px] text-slate-500 mt-1">
+                  {m.llm_model} · first token {fmtMs(m.ttft_ms)} · total {fmtMs(m.latency_ms)}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {pendingQuestion && (
+          <div className="flex justify-end">
+            <div className="max-w-[85%] bg-indigo-600/30 border border-indigo-700 rounded-lg px-3 py-2 text-xs text-indigo-100">
+              {pendingQuestion}
+            </div>
+          </div>
+        )}
+
+        {busy && (
+          <div className="text-xs leading-relaxed text-slate-200">
+            {streamingText ? renderMarkdown(streamingText) : (
+              <div className="flex items-center gap-2 text-slate-400 py-4">
+                <Sparkles className="animate-spin text-indigo-400" size={16} />
+                {hasNarrative ? 'Answering…' : 'Synthesizing grounded SHAP narrative…'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <div className="text-xs text-rose-400 bg-rose-950/40 p-2.5 rounded-lg border border-rose-800 space-y-2">
+            <p>{error}</p>
+            {!hasNarrative && (
+              <button onClick={() => run()} className="underline text-rose-300 hover:text-white">Retry</button>
+            )}
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <form onSubmit={handleSend} className="flex items-center gap-2 mt-3">
+        <input
+          type="text"
+          maxLength={1000}
+          disabled={!hasNarrative || busy}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={hasNarrative ? 'e.g., Which feature change would flip this decision?' : 'Waiting for the narrative…'}
+          className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+        />
+        <button
+          type="submit"
+          disabled={!hasNarrative || busy || !query.trim()}
+          className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-white px-3 py-2 rounded-lg text-xs transition flex items-center gap-1 shadow"
+        >
+          <Send size={14} /> Send
+        </button>
+      </form>
+    </div>
+  );
+};

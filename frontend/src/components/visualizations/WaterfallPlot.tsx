@@ -1,32 +1,63 @@
 import React from 'react';
 import Plot from 'react-plotly.js';
-import { FeatureContribution } from '../../types/api';
+import { InstanceExplainResponse } from '../../types/api';
 import { Target, Activity } from 'lucide-react';
+import { fmt, fmtMs } from '../../utils/format';
+
+// SHAP's convention: red pushes the output up, blue pushes it down
+export const SHAP_POSITIVE = '#ff0051';
+export const SHAP_NEGATIVE = '#008bfb';
+const MAX_BARS = 10;
 
 interface WaterfallPlotProps {
-  baseValue: number;
-  prediction: number;
-  predictedClass?: string;
-  probabilities?: Record<string, number>;
-  contributions: FeatureContribution[];
+  result: InstanceExplainResponse;
 }
 
-export const WaterfallPlot: React.FC<WaterfallPlotProps> = ({
-  baseValue,
-  prediction,
-  predictedClass,
-  probabilities,
-  contributions
-}) => {
-  const topFeatures = contributions.slice(0, 10).reverse();
+const valueLabel = (v: number | string | null) =>
+  v === null ? '—' : typeof v === 'number' ? String(Number(v.toFixed(4))) : v;
 
-  const labels = topFeatures.map(f => `${f.feature} (${f.actual_value})`);
-  const values = topFeatures.map(f => f.shap_value);
-  const colors = topFeatures.map(f => f.shap_value >= 0 ? '#38bdf8' : '#f87171');
+export const WaterfallPlot: React.FC<WaterfallPlotProps> = ({ result }) => {
+  const contributions = result.feature_contributions;
+  const shown = contributions.slice(0, MAX_BARS);
+  const rest = contributions.slice(MAX_BARS);
+  const restSum = rest.reduce((a, c) => a + c.shap_value, 0);
+  const attributionSum = contributions.reduce((a, c) => a + c.shap_value, 0);
+
+  // Bottom-to-top: remaining features, then smallest to largest, then f(x)
+  const ordered = [...shown].reverse();
+  const labels = [
+    ...(rest.length ? [`${rest.length} other features`] : []),
+    ...ordered.map((c) => `${c.feature} = ${valueLabel(c.actual_value)}`),
+    'f(x)',
+  ];
+  const deltas = [...(rest.length ? [restSum] : []), ...ordered.map((c) => c.shap_value), 0];
+  const measures = [...deltas.slice(0, -1).map(() => 'relative'), 'total'];
+
+  const isClassification = result.task_type === 'classification';
+  const unitsNote =
+    result.output_units === 'log-odds'
+      ? 'Attributions are in log-odds. Upload a background dataset to explain in probability space.'
+      : `Attributions are in ${result.output_units}.`;
+
+  const trace: any = {
+    type: 'waterfall',
+    orientation: 'h',
+    base: result.base_value,
+    measure: measures,
+    y: labels,
+    x: deltas,
+    text: deltas.map((d, i) => (i === deltas.length - 1 ? fmt(result.explained_output, 3) : `${d >= 0 ? '+' : ''}${fmt(d, 3)}`)),
+    textposition: 'outside',
+    cliponaxis: false,
+    increasing: { marker: { color: SHAP_POSITIVE } },
+    decreasing: { marker: { color: SHAP_NEGATIVE } },
+    totals: { marker: { color: '#6366f1' } },
+    connector: { line: { color: '#475569', width: 1 } },
+    hovertemplate: '%{y}<br>%{x:.4f}<extra></extra>',
+  };
 
   return (
     <div className="bg-slate-800/80 p-5 rounded-xl border border-slate-700 shadow-lg space-y-4">
-      {/* Top Banner: Prediction and Probabilities */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-slate-900/90 border border-slate-700">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
@@ -36,11 +67,13 @@ export const WaterfallPlot: React.FC<WaterfallPlotProps> = ({
             <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Model Prediction</span>
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold text-white">
-                {predictedClass ? `Class: ${predictedClass}` : prediction.toFixed(4)}
+                {isClassification ? `Class ${result.predicted_class}` : fmt(result.prediction)}
               </span>
-              <span className="text-xs text-emerald-400 font-mono font-bold">
-                ({(prediction * 100).toFixed(1)}% confidence)
-              </span>
+              {isClassification && (
+                <span className="text-xs text-emerald-400 font-mono font-bold">
+                  P = {(result.prediction * 100).toFixed(1)}%
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -48,26 +81,27 @@ export const WaterfallPlot: React.FC<WaterfallPlotProps> = ({
         <div className="flex items-center gap-4 text-xs font-mono">
           <div className="text-right">
             <span className="text-slate-400 block text-[10px] uppercase font-sans">Baseline E[f(x)]</span>
-            <span className="text-slate-300 font-semibold">{baseValue.toFixed(4)}</span>
+            <span className="text-slate-300 font-semibold">{fmt(result.base_value)}</span>
           </div>
           <div className="text-right border-l border-slate-700 pl-4">
-            <span className="text-slate-400 block text-[10px] uppercase font-sans">Attribution Sum</span>
-            <span className="text-indigo-400 font-semibold">
-              {(values.reduce((a, b) => a + b, 0)).toFixed(4)}
-            </span>
+            <span className="text-slate-400 block text-[10px] uppercase font-sans">Σ SHAP (all features)</span>
+            <span className="text-indigo-400 font-semibold">{attributionSum >= 0 ? '+' : ''}{fmt(attributionSum)}</span>
+          </div>
+          <div className="text-right border-l border-slate-700 pl-4">
+            <span className="text-slate-400 block text-[10px] uppercase font-sans">f(x)</span>
+            <span className="text-white font-semibold">{fmt(result.explained_output)}</span>
           </div>
         </div>
       </div>
 
-      {/* Class Probabilities Distribution */}
-      {probabilities && Object.keys(probabilities).length > 1 && (
+      {result.probabilities && Object.keys(result.probabilities).length > 1 && (
         <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-700/60 text-xs">
           <span className="text-slate-400 text-[11px] font-semibold block mb-2 flex items-center gap-1.5">
             <Activity size={13} className="text-slate-400" />
             Class Probability Distribution
           </span>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {Object.entries(probabilities).map(([cls, prob]) => (
+            {Object.entries(result.probabilities).map(([cls, prob]) => (
               <div key={cls} className="bg-slate-800/80 px-2.5 py-1.5 rounded border border-slate-700 flex justify-between items-center">
                 <span className="font-mono text-slate-300 truncate mr-2">{cls}</span>
                 <span className="font-mono font-bold text-emerald-400">{(prob * 100).toFixed(1)}%</span>
@@ -77,39 +111,31 @@ export const WaterfallPlot: React.FC<WaterfallPlotProps> = ({
         </div>
       )}
 
-      {/* Feature Attribution Chart */}
       <div>
-        <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-          Local Feature Attributions (SHAP)
+        <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+          Local SHAP Waterfall{isClassification ? ` · explains class ${result.explained_class}` : ''}
         </h4>
+        <p className="text-[11px] text-slate-500 mb-2">
+          {unitsNote} {result.explainer_type} · additivity gap {result.additivity_gap.toExponential(1)} · computed in {fmtMs(result.shap_ms)}
+        </p>
         <Plot
-          data={[
-            {
-              type: 'bar',
-              orientation: 'h',
-              y: labels,
-              x: values,
-              marker: { color: colors },
-            }
-          ]}
+          data={[trace]}
           layout={{
             autosize: true,
-            height: 320,
-            margin: { l: 140, r: 20, t: 10, b: 35 },
+            height: 60 + labels.length * 28,
+            margin: { l: 10, r: 60, t: 10, b: 35 },
             paper_bgcolor: 'transparent',
             plot_bgcolor: 'transparent',
+            showlegend: false,
             xaxis: {
-              title: { text: 'Impact on Prediction (SHAP Value)', font: { size: 11, color: '#94a3b8' } },
-              zeroline: true,
-              zerolinecolor: '#64748b',
+              title: { text: `Model output (${result.output_units})`, font: { size: 11, color: '#94a3b8' } },
               gridcolor: '#334155',
               tickfont: { color: '#94a3b8', size: 10 },
+              zeroline: false,
             },
-            yaxis: {
-              automargin: true,
-              tickfont: { color: '#cbd5e1', size: 11 }
-            }
+            yaxis: { automargin: true, tickfont: { color: '#cbd5e1', size: 11 } },
           }}
+          config={{ displayModeBar: false, responsive: true }}
           useResizeHandler={true}
           className="w-full"
         />

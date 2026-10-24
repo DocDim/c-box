@@ -2,7 +2,7 @@
 
 A privacy-first, bare-metal Explainable AI (XAI) web platform that combines quantitative feature attributions from **SHAP (SHapley Additive exPlanations)** with grounded qualitative natural language interpretations powered by a local **Gemma** model running on **Ollama**.
 
-Built with an asynchronous **FastAPI** backend and an interactive **React + Vite + TypeScript** frontend, this platform operates with **zero cloud data egress**, ensuring full regulatory compliance (e.g., GDPR Right to Explanation, FDA SaMD guidelines) for sensitive tabular domains like clinical healthcare, loan underwriting, and policy analytics.
+Built with an asynchronous **FastAPI** backend and an interactive **React + Vite + TypeScript** frontend, this platform is designed for **zero cloud data egress** (GDPR Right to Explanation, FDA SaMD transparency) in sensitive tabular domains like clinical healthcare, loan underwriting, and policy analytics.
 
 ---
 
@@ -21,7 +21,10 @@ Built with an asynchronous **FastAPI** backend and an interactive **React + Vite
   - [4. Frontend Setup (React + Vite)](#4-frontend-setup-react--vite)
 - [API Reference](#api-reference)
 - [Data Serialization & Grounding Contract](#data-serialization--grounding-contract)
+- [Security Model & Threat Assumptions](#security-model--threat-assumptions)
 - [Verification & Testing](#verification--testing)
+- [Evaluation Support](#evaluation-support)
+- [Deviations from SRS v1.0.1 / SDD v1.0.0](#deviations-from-srs-v101--sdd-v100)
 - [Roadmap & Milestone Progression](#roadmap--milestone-progression)
 - [License](#license)
 
@@ -30,18 +33,17 @@ Built with an asynchronous **FastAPI** backend and an interactive **React + Vite
 ## Key Features
 
 1. **Dual-Layer Explainability Framework:**
-   - **Quantitative Rigor:** Automated explainer factory selects `shap.TreeExplainer` for high-speed tree ensembles (Random Forest, XGBoost, LightGBM) with fallback to `shap.KernelExplainer` for black-box estimators.
-   - **Qualitative Grounding:** Serializes top-$K$ positive and negative SHAP feature contributions into strict JSON context injected into a local Gemma instance via Ollama.
-2. **Zero Cloud Egress & Data Sovereignty:**
-   - Model binaries, CSV datasets, and feature contributions are processed entirely on-premise on bare metal.
-   - LLM queries are dispatched locally to `http://localhost:11434` without third-party API dependencies.
-3. **Multi-Model Ownership & Discretionary Access Control (DAC):**
-   - Users can upload and manage multiple machine learning models.
-   - Owners can grant, update, or revoke access for other registered users by email with granular roles (`VIEWER`, `EXPLAINER`, `ADMIN`).
-4. **Sandboxed Filesystem Storage:**
-   - Model binaries (`.joblib`, `.pkl`) and datasets (`.csv`) are quarantined in tenant-isolated paths (`storage/models/{owner_id}/`) protected against directory traversal attacks.
-5. **Interactive Client Visualizations:**
-   - Frontend consumes pure JSON metrics to render dynamic interactive Waterfall, Force, and Global Summary beeswarm charts without relying on static image bitmaps.
+   - **Quantitative Rigor:** Automated explainer factory selects `shap.TreeExplainer` for tree ensembles, explaining classifiers directly in probability space (interventional, against the model's reference dataset), with fallback to `shap.KernelExplainer` over a k-means summary of that dataset for black-box estimators.
+   - **Consistent units:** every explanation reports `output_units` (probability, log-odds, target units) and the additivity gap `|E[f(x)] + Σφ − f(x)|`, so baseline, attributions and prediction are always on the same scale.
+   - **Qualitative Grounding:** Top-$K$ positive and negative SHAP contributions are serialized into a strict JSON context and sent to a local Gemma instance via Ollama.
+2. **Server-side grounding:** the LLM only ever sees SHAP values the server computed and stored. Chat requests reference an `explanation_id`; attribution values are never accepted from the client.
+3. **Multi-turn follow-up Q&A** with full conversation history, streamed token-by-token over Server-Sent Events.
+4. **Automated faithfulness check:** every LLM answer is scanned; each number must be a rounding of a value in the SHAP payload, and narratives are checked for the 4-part structure.
+5. **Zero Cloud Egress by default:** a non-loopback `OLLAMA_BASE_URL` is refused unless `ALLOW_REMOTE_LLM=true` is set explicitly.
+6. **Multi-Model Ownership & Discretionary Access Control (DAC):** grant, update, list and revoke `VIEWER` / `EXPLAINER` / `ADMIN` access by email; owners can delete models.
+7. **Sandboxed storage & ingestion:** uploads are size-limited, quarantined under `storage/{models|datasets}/{user_id}/`, path-checked with `Path.is_relative_to`, and model files are deserialized in a disposable child process with a timeout. `.skops` (non-pickle) models are supported.
+8. **Interactive client visualizations:** Plotly waterfall, force plot, global importance bar, beeswarm and dependence plots rendered from JSON.
+9. **Audit trail & evaluation metrics:** every explanation and LLM answer is recorded with latency and faithfulness, with aggregate metrics and CSV export for the evaluation report.
 
 ---
 
@@ -50,137 +52,133 @@ Built with an asynchronous **FastAPI** backend and an interactive **React + Vite
 ```
 +-----------------------------------------------------------------------------------------+
 |                                PRESENTATION LAYER (CLIENT)                              |
-| React 18 + TypeScript + Vite (:3000)                                                    |
-|  * Auth Context (JWT State)           * Model/Dataset Upload Form & Schema Inspector    |
-|  * Tabular Data Grid & Row Selector   * Interactive Visualizer (Plotly Waterfall/Force) |
-|  * Conversational Explanation Stream Card & Guided Follow-Up Chat Box                  |
+| React 18 + TypeScript + Vite (:3001)                                                    |
+|  * Auth (JWT)  * Model / Dataset Upload  * Paginated Row Selector  * What-If Inputs     |
+|  * Plotly Waterfall / Force / Beeswarm / Dependence  * Streaming Grounded Chat          |
+|  * Sharing Panel  * Audit & Evaluation Metrics                                          |
 +--------------------------------------------+--------------------------------------------+
-                                             | HTTP / REST (Vite Dev Proxy -> :8000)
+                                             | HTTP / REST + SSE (Vite Dev Proxy -> :8001)
                                              v
 +-----------------------------------------------------------------------------------------+
 |                             APPLICATION & API LAYER (BACKEND)                           |
-| FastAPI + Uvicorn Async Runtime (:8000)                                                 |
-|  +--------------------+  +--------------------+  +------------------+  +--------------+ |
-|  | Auth & Access Ctrl |  | Artifact Ingest    |  | Inference Engine |  | Explain/Chat | |
-|  | (JWT, RBAC Gate)   |  | (Storage Scrubber) |  | (Predict Dispatch|  | (SHAP & LLM) | |
-|  +---------+----------+  +---------+----------+  +--------+---------+  +-------+------+ |
-|            |                       |                      |                    |        |
-|            +-----------------------+----------------------+--------------------+        |
+| FastAPI + Uvicorn Async Runtime (:8001)                                                 |
+|  Auth & RBAC Gate | Model & Dataset Ingest | Inference | Explain / Chat | Audit         |
 +--------------------------------------------+--------------------------------------------+
-                                             |
                +-----------------------------+-----------------------------+
-               v                                                           v
+               v                             v                             v
 +---------------------------+  +--------------------------+  +----------------------------+
 |     PERSISTENCE TIER      |  |   COMPUTE WORKER TIER    |  |     LLM RUNTIME TIER       |
-| SQLite (aiosqlite)        |  | In-Process CPU Workers   |  | Local Ollama (:11434)      |
-|  * users (Auth & Roles)   |  |  * joblib Model Loader   |  |  * Gemma 2B / 7B Model     |
-|  * model_artifacts        |  |  * shap.TreeExplainer    |  |  * Grounded JSON Prompter  |
-|  * model_shares (DAC)     |  |  * shap.KernelExplainer  |  |  * Zero-Egress Inference   |
+| SQLite (aiosqlite)        |  | Thread-pool workers      |  | Local Ollama (:11434)      |
+|  * users                  |  |  * sandboxed inspection  |  |  * Gemma                   |
+|  * model_artifacts        |  |    subprocess            |  |  * Grounded JSON Prompter  |
+|  * model_shares (DAC)     |  |  * LRU explainer cache   |  |  * SSE token streaming     |
+|  * datasets               |  |  * shap.TreeExplainer    |  |                            |
+|  * explanation_records    |  |  * shap.KernelExplainer  |  |                            |
+|  * chat_messages          |  |                          |  |                            |
 +---------------------------+  +--------------------------+  +----------------------------+
 ```
+
+CPU-bound work (deserialization, SHAP, pandas) runs in a thread pool so the event loop stays responsive. Loaded estimators and explainers are cached per model; the cache key includes the file's modification time and the background dataset id.
 
 ---
 
 ## Role-Based Access Control (RBAC)
 
-The system implements a discretionary role hierarchy governing access to model artifacts and inference operations:
-
-| Role | View Metadata & Data Preview | Execute Inference | Run SHAP & LLM Narratives | Manage & Share Access | Delete / Transfer Artifact |
+| Role | View Data & Predict | Run SHAP & LLM | Manage Sharing & Audit | Grant / Revoke ADMIN | Delete Model |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **`VIEWER`** | :white_check_mark: | :white_check_mark: | :x: | :x: | :x: |
-| **`EXPLAINER`** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :x: |
-| **`ADMIN`** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+| **`VIEWER`** | :white_check_mark: | :x: | :x: | :x: | :x: |
+| **`EXPLAINER`** | :white_check_mark: | :white_check_mark: | :x: | :x: | :x: |
+| **`ADMIN`** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :x: |
 | **`OWNER`** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+
+Conversations are private to the user who ran the explanation. ADMIN and OWNER see all of them through the audit trail.
 
 ---
 
 ## Tech Stack
 
 - **Backend:** Python 3.11+, FastAPI, Uvicorn, Pydantic v2, Pydantic-Settings
-- **Machine Learning & XAI:** `shap` (v0.45+), `scikit-learn`, `joblib`, `pandas`, `numpy`
-- **LLM Integration:** Ollama (Local Daemon), Gemma (2B / 7B parameter variants), `httpx` (async)
-- **Database & Security:** SQLite, SQLAlchemy 2.0 (AsyncIO with `aiosqlite`), Passlib (Bcrypt), PyJWT (HS256)
-- **Frontend:** React 18, Vite, TypeScript, Tailwind CSS, Plotly.js / Recharts, Lucide React
+- **Machine Learning & XAI:** `shap` (v0.45+), `scikit-learn`, `joblib`, `skops`, `pandas`, `numpy`
+- **LLM Integration:** Ollama (local daemon), Gemma, `httpx` (async, streaming)
+- **Database & Security:** SQLite, SQLAlchemy 2.0 (AsyncIO with `aiosqlite`), `pwdlib` (bcrypt, work factor 12), PyJWT (HS256)
+- **Frontend:** React 18, Vite, TypeScript, Tailwind CSS, Plotly.js, Lucide React
 
 ---
 
 ## Repository Structure
 
 ```text
-xai-shap-llm/
+c-box/
 ├── .env.example                     # Environment template
-├── .env                             # Active environment configuration
-├── .gitignore                       # Git exclusion rules
-├── README.md                        # Project documentation
+├── README.md
 │
-├── backend/                         # FastAPI core backend service
-│   ├── requirements.txt             # Python dependencies
-│   ├── run.py                       # Local Uvicorn runner
+├── backend/
+│   ├── requirements.txt             # Runtime dependencies
+│   ├── requirements-dev.txt         # + pytest
+│   ├── pytest.ini
+│   ├── run.py                       # Local Uvicorn runner (BACKEND_HOST / BACKEND_PORT)
+│   ├── init_db.py                   # Creates / upgrades the SQLite schema
 │   │
 │   ├── app/
-│   │   ├── main.py                  # App entry point, CORS, and lifespan
-│   │   ├── config.py                # Environment configurations & sandboxing
-│   │   ├── database.py              # SQLAlchemy async engine & sessionmaker
+│   │   ├── main.py                  # App entry point, CORS, lifespan (schema upgrade + backfill)
+│   │   ├── config.py                # Settings, secret / zero-egress validation
+│   │   ├── database.py              # Async engine, FK pragma, lightweight migrations
 │   │   │
-│   │   ├── api/v1/                  # REST API v1 routing layer
-│   │   │   ├── router.py            # Aggregator for v1 endpoints
-│   │   │   └── endpoints/
-│   │   │       ├── auth.py          # User registration, login, and profile
-│   │   │       ├── upload.py        # Model and CSV dataset ingestion
-│   │   │       ├── model_access.py  # Model access delegation & listing
-│   │   │       ├── predict.py       # Point and batch inference
-│   │   │       ├── explain.py       # Local and global SHAP computations
-│   │   │       └── chat.py          # Gemma grounded narrative generation
+│   │   ├── api/v1/endpoints/
+│   │   │   ├── auth.py              # Register, login, me
+│   │   │   ├── models.py            # Upload, list, get, delete, sharing, background dataset
+│   │   │   ├── datasets.py          # Upload + validation, list, paginated rows, delete
+│   │   │   ├── predict.py           # Point inference (VIEWER+)
+│   │   │   ├── explain.py           # Local / global SHAP, grounded chat (JSON + SSE)
+│   │   │   └── audit.py             # Audit trail, evaluation metrics, CSV export
 │   │   │
-│   │   ├── core/                    # Core business and algorithmic logic
-│   │   │   ├── security.py          # Bcrypt hashing and JWT token handlers
-│   │   │   ├── dependencies.py      # OAuth2 token authentication guards
-│   │   │   ├── permissions.py       # RBAC / DAC access verification gate
-│   │   │   ├── model_loader.py      # Safe model loading and inspection
-│   │   │   ├── shap_engine.py       # Tree & Kernel explainer engine
-│   │   │   └── llm_service.py       # Grounded Ollama prompt engine
+│   │   ├── core/
+│   │   │   ├── security.py          # bcrypt hashing and JWT
+│   │   │   ├── dependencies.py      # OAuth2 bearer guard
+│   │   │   ├── permissions.py       # RBAC / DAC gates for models and datasets
+│   │   │   ├── storage.py           # Path sandbox, filename sanitizing, size-limited uploads
+│   │   │   ├── model_loader.py      # Extension policy, subprocess inspection
+│   │   │   ├── _inspect_worker.py   # Child-process loader (joblib / skops)
+│   │   │   ├── feature_alignment.py # Column validation, target detection, reordering
+│   │   │   ├── shap_engine.py       # Explainer factory, unit detection, global beeswarm
+│   │   │   ├── explainer_cache.py   # LRU cache of estimators / explainers
+│   │   │   ├── instances.py         # Resolves manual inputs / dataset rows, cached engines
+│   │   │   ├── inference.py         # Shared prediction helper
+│   │   │   ├── llm_service.py       # Context payload, multi-turn prompts, Ollama streaming
+│   │   │   ├── faithfulness.py      # Automated grounding check
+│   │   │   └── maintenance.py       # Startup backfill of model metadata
 │   │   │
-│   │   ├── models/                  # SQLAlchemy ORM models
-│   │   │   ├── user.py              # User account entity
-│   │   │   └── artifact.py          # ModelArtifact and ModelShare entities
-│   │   │
-│   │   ├── schemas/                 # Pydantic validation schemas
-│   │   │   ├── user.py              # Auth and profile contracts
-│   │   │   ├── artifact.py          # Sharing and metadata contracts
-│   │   │   ├── dataset.py           # Ingestion and preview contracts
-│   │   │   ├── explain.py           # SHAP numerical payloads
-│   │   │   └── chat.py              # LLM narrative and follow-up contracts
-│   │   │
-│   │   └── storage/                 # Sandboxed bare-metal storage
-│   │       ├── models/              # Quarantined model binaries
-│   │       └── datasets/            # Quarantined CSV datasets
+│   │   ├── models/                  # user, artifact (+shares), dataset, explanation (+chat)
+│   │   ├── schemas/                 # Pydantic contracts
+│   │   └── storage/                 # Sandboxed models/ and datasets/
 │   │
-│   └── tests/                       # Unit and integration test suites
+│   └── tests/                       # Engine, LLM, API, RBAC and security tests
 │
-├── frontend/                        # React + Vite client dashboard
-│   ├── index.html                   # HTML entry point
-│   ├── package.json                 # Node dependencies
-│   ├── tsconfig.json                # TypeScript compiler config
-│   ├── vite.config.ts               # Vite configuration & dev proxy
+├── frontend/
+│   ├── vite.config.ts               # Dev server (:3001) and /api proxy (VITE_API_TARGET)
 │   └── src/
-│       ├── main.tsx                 # React entry point
-│       ├── App.tsx                  # Pipeline navigation
-│       ├── components/              # Modular UI components
-│       ├── services/api.ts          # Axios / Fetch client with JWT interceptor
-│       └── types/api.ts             # TypeScript interfaces
+│       ├── App.tsx
+│       ├── components/
+│       │   ├── upload/              # Model and dataset upload forms
+│       │   ├── models/              # Model context card, sharing panel
+│       │   ├── data/                # Paginated dataset table, prediction / what-if module
+│       │   ├── visualizations/      # Waterfall, force, summary (bar / beeswarm / dependence)
+│       │   ├── chat/                # Streaming grounded chat with faithfulness badges
+│       │   └── audit/               # Audit trail and evaluation metrics
+│       ├── services/api.ts          # Axios client + SSE stream reader
+│       ├── types/api.ts
+│       └── utils/format.ts
 │
-└── sample_data/                     # Baseline evaluation artifacts
-    ├── models/                      # Sample trained models
-    └── datasets/                    # Matching evaluation CSVs
+└── sample_data/                     # Sample model and matching evaluation CSV
 ```
 
 ---
 
 ## Prerequisites
 
-1. **Python 3.11+** installed locally.
-2. **Node.js (v18+)** and **npm** installed.
-3. **Ollama** installed on your workstation ([Download Ollama](https://ollama.com/download)).
+1. **Python 3.11+**
+2. **Node.js 18+** and **npm**
+3. **Ollama** ([Download Ollama](https://ollama.com/download))
 
 ---
 
@@ -189,94 +187,68 @@ xai-shap-llm/
 ### 1. Clone Repository & Setup Environment
 
 ```bash
-git clone https://github.com/your-username/xai-shap-llm.git
-cd xai-shap-llm
-
-# Copy environment variables
+git clone https://github.com/DocDim/c-box.git
+cd c-box
 cp .env.example .env
 ```
 
-Ensure `.env` matches your local configuration:
+Generate a secret key and put it in `.env`. The backend refuses to start with the placeholder or with a key shorter than 32 characters:
 
-```env
-PROJECT_NAME="SHAP-LLM Explainability Platform"
-DEBUG=True
-SECRET_KEY="generate-a-secure-random-secret-key-here"
-ALGORITHM="HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
-DATABASE_URL="sqlite+aiosqlite:///./xai_app.db"
-OLLAMA_BASE_URL="http://localhost:11434"
-OLLAMA_MODEL="gemma"
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
----
+```env
+SECRET_KEY="<paste generated key>"
+DATABASE_URL="sqlite+aiosqlite:///./xai_app.db"
+OLLAMA_BASE_URL="http://localhost:11434"
+OLLAMA_MODEL="gemma:2b"
+# ALLOW_REMOTE_LLM=true   # only if Ollama runs on another host (NFR-2 deviation)
+```
+
+All settings are listed in [backend/app/config.py](backend/app/config.py). Values in `.env` must use `KEY=value` syntax.
 
 ### 2. Ollama Local LLM Engine Setup
 
-Start the Ollama daemon and pull the Gemma model:
-
 ```bash
-# Start Ollama service (if not running as a system service)
 ollama serve
-
-# In a separate terminal, pull the model
-ollama pull gemma
-```
-
-Verify that the local endpoint responds:
-
-```bash
+ollama pull gemma:2b        # larger variants (e.g. gemma2:9b) give noticeably more faithful narratives
 curl http://localhost:11434/api/tags
 ```
 
----
-
 ### 3. Backend Setup (FastAPI)
-
-Navigate to the `backend/` directory, create a virtual environment, and install requirements:
 
 ```bash
 cd backend
-
-# Create virtual environment
 python -m venv venv
-
-# Activate virtual environment
-# On Linux / macOS:
-source venv/bin/activate
-# On Windows CMD:
-venv\Scripts\activate
-# On Windows PowerShell:
-.\venv\Scripts\Activate.ps1
-
-# Upgrade pip and install dependencies
+# Linux / macOS: source venv/bin/activate
+# Windows PowerShell: .\venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-
-# Start the application server
+pip install -r requirements-dev.txt
 python run.py
 ```
 
-The backend starts at `http://127.0.0.1:8000`.  
-Explore interactive OpenAPI documentation at **`http://127.0.0.1:8000/docs`**.
-
----
+The backend starts at `http://127.0.0.1:8001`; OpenAPI docs are at **`http://127.0.0.1:8001/docs`**.
+On startup, existing SQLite databases are upgraded in place, and models uploaded before v1.1 are re-inspected so their task type and feature metadata are recorded.
 
 ### 4. Frontend Setup (React + Vite)
 
-Open a new terminal window, navigate to `frontend/`, and initialize dependencies:
-
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start Vite development server
 npm run dev
 ```
 
-The client will be running at `http://localhost:5173`. Any API calls to `/api/v1` are automatically proxied to `http://127.0.0.1:8000`.
+The client runs at `http://localhost:3001`. Calls to `/api/v1` are proxied to `http://127.0.0.1:8001`; set `VITE_API_TARGET` to point the proxy elsewhere.
+
+**UI layout.** The left column holds navigation plus the active model's metadata (role, estimator, task, classes, features, background dataset). The centre shows the current page. The right column holds the grounded chat for the current explanation.
+
+| Page | Purpose |
+| :--- | :--- |
+| `#/models` | Register a model together with its background data; list, activate, share, delete. The owner reloads the background data under *Manage → Background data* |
+| `#/predict` | Choose the model for the prediction, then predict a **single data point** from a form, or run a **batch** prediction on an evaluation dataset loaded on the page; explain any result with SHAP |
+| `#/insights` | Global model behaviour from SHAP over the background data: importance, beeswarm, dependence (EXPLAINER+) |
+| `#/audit` | Audit trail, evaluation metrics, CSV export (ADMIN / OWNER) |
 
 ---
 
@@ -284,74 +256,131 @@ The client will be running at `http://localhost:5173`. Any API calls to `/api/v1
 
 All protected endpoints require an `Authorization: Bearer <JWT>` header.
 
-### Authentication Endpoints
-- `POST /api/v1/auth/register`: Register new account (`{ email, password }`).
-- `POST /api/v1/auth/login`: OAuth2 password form (`username`, `password`); returns Bearer JWT.
-- `GET /api/v1/auth/me`: Retrieve profile of currently authenticated user.
+### Authentication
+- `POST /api/v1/auth/register` (`{ email, password }`; password 8 to 72 characters)
+- `POST /api/v1/auth/login` (OAuth2 form `username`, `password`; returns a JWT)
+- `GET /api/v1/auth/me`
 
-### Model & Dataset Ingestion
-- `POST /api/v1/upload/model`: Upload `.joblib` / `.pkl` binary, model name, and domain context (`multipart/form-data`).
-- `POST /api/v1/upload/dataset`: Upload `.csv` dataset; returns columns, shape, and 5-row schema preview.
+### Models & Sharing
+- `POST /api/v1/models/upload`: multipart `file` (`.skops`, `.joblib`, `.pkl`; max 250 MB), `name`, `domain_context`, optional `background_file` (CSV) and `target_column`. The background CSV is validated against the model's features and registered as its SHAP reference in the same transaction; if it is rejected, nothing is saved. Returns the detected estimator, task type, feature names and classes.
+- `GET /api/v1/models/` · `GET /api/v1/models/{id}` · `DELETE /api/v1/models/{id}` (owner)
+- `POST /api/v1/models/{id}/background` (multipart `file`, optional `target_column`; **owner only**): uploads or replaces the background data. The previous background dataset is deleted.
+- `GET /api/v1/models/{id}/shares` · `POST /api/v1/models/{id}/share` (`{ user_email, role }`) · `DELETE /api/v1/models/{id}/share/{user_id}` (ADMIN+)
 
-### Access Sharing (DAC)
-- `GET /api/v1/models/`: List all models owned by the user or shared with them.
-- `POST /api/v1/models/{id}/share`: Grant access to another user (`{ user_email, role }`). Requires `OWNER` or `ADMIN` role.
+### Datasets
+- `POST /api/v1/datasets/upload`: multipart `file`, optional `model_id`, `target_column`. Uploads **evaluation** data to predict on: validates columns against the model, auto-detects a single extra column as the target, and returns summary statistics and a preview. Any user who can run the model may load one. It never becomes background data.
+- `GET /api/v1/datasets/?model_id=&purpose=background|evaluation` · `GET /api/v1/datasets/{id}/rows?offset=&limit=` · `DELETE /api/v1/datasets/{id}`
 
 ### Inference & Explainability
-- `POST /api/v1/predict/{model_id}`: Execute point prediction on a single feature dictionary.
-- `POST /api/v1/explain/instance`: Compute local base value, prediction, and per-feature SHAP attributions.
-- `POST /api/v1/explain/global`: Compute mean absolute global SHAP values across evaluation samples.
-- `POST /api/v1/explain/chat`: Stream or generate structured 4-part natural language narrative via local Gemma.
+Instance requests take either `instance_features`, or `dataset_id` + `row_index` (optionally with `instance_features` overrides).
+- `POST /api/v1/predict/` (VIEWER+): one data point.
+- `POST /api/v1/predict/batch` (`{ model_id, dataset_id, offset, limit }`, VIEWER+): predicts every row and returns one page of rows, class counts or prediction statistics, and accuracy (classification) or MAE / RMSE / R² (regression) when the dataset has a target column.
+- `GET /api/v1/predict/batch/export.csv?model_id=&dataset_id=`: the dataset with predictions and per-class probabilities appended.
+- `POST /api/v1/explain/instance` (EXPLAINER+): stores and returns the explanation with its `explanation_id`.
+- `GET /api/v1/explain/global/{model_id}?max_samples=&class_index=`: importance plus beeswarm / dependence data (N ≤ 300), computed on the model's background data.
+- `POST /api/v1/explain/chat` (`{ explanation_id, question? }`): 4-part narrative when `question` is omitted, otherwise a follow-up with history.
+- `POST /api/v1/explain/chat/stream`: same, as Server-Sent Events (`token`, `done`, `error`).
+- `GET /api/v1/explain/{explanation_id}` · `GET /api/v1/explain/{explanation_id}/conversation`
+
+### Audit (ADMIN / OWNER)
+- `GET /api/v1/audit/models/{id}/explanations` · `GET /api/v1/audit/models/{id}/metrics` · `GET /api/v1/audit/models/{id}/export.csv`
 
 ---
 
+## Background Data vs Evaluation Data
+
+| | Background data | Evaluation data |
+| :--- | :--- | :--- |
+| Purpose | SHAP reference distribution (E[f(x)], Kernel k-means summary, interventional trees) and Global Insights | Rows to predict and explain |
+| Loaded by | **Model owner only**: at registration, or replaced later on the Models page | Any user with access to the model, from the Predict page |
+| Predictions | **Never.** `/predict`, `/predict/batch` and `/explain/instance` reject it | Single rows, batch, export |
+| Lifecycle | One per model; replacing it deletes the old file; deleted with the model | Kept (unlinked) when the model is deleted |
+
 ## Data Serialization & Grounding Contract
 
-To prevent LLM hallucination of numerical metrics, SHAP values are extracted and serialized into a deterministic JSON context:
+The LLM receives a payload built from the stored explanation record:
 
 ```json
 {
-  "domain": "Clinical Healthcare - Cardiology",
+  "domain": "Clinical Cardiology",
+  "task_type": "classification",
+  "output_units": "probability",
+  "units_note": "Baseline, contributions and final output are probabilities between 0 and 1 ...",
   "baseline_expectation": 0.354,
-  "final_prediction": 0.842,
+  "explained_output": 0.842,
   "top_positive_factors": [
-    { "feature": "st_depression", "actual_value": 2.3, "shap_value": 0.284 },
-    { "feature": "max_heart_rate", "actual_value": 112, "shap_value": 0.156 }
+    { "feature": "st_depression", "value": 2.3, "shap": 0.284 },
+    { "feature": "max_heart_rate", "value": 112, "shap": 0.156 }
   ],
-  "top_negative_factors": [
-    { "feature": "age", "actual_value": 58, "shap_value": -0.020 }
-  ]
+  "top_negative_factors": [{ "feature": "age", "value": 58, "shap": -0.02 }],
+  "other_features_net_shap": 0.068,
+  "predicted_class": "1",
+  "explained_class": "1",
+  "prediction_probability": 0.842,
+  "class_probabilities": { "0": 0.158, "1": 0.842 }
 }
 ```
 
-The Ollama Gemma engine is conditioned with a strict system prompt to formulate a structured 4-part explanation:
-1. **Executive Summary:** Prediction relative to baseline reference.
-2. **Upward Drivers:** Factors increasing the score.
-3. **Mitigating Drivers:** Factors reducing the score.
-4. **Actionable Recommendations:** Grounded, domain-specific next steps.
+The narrative uses four fixed headings: **Executive Summary**, **Upward Pressures**, **Mitigating Factors**, **Actionable Next Step**. Follow-up questions replay the full conversation behind the same context, so every answer is bounded by the same payload.
+
+---
+
+## Security Model & Threat Assumptions
+
+- **Pickle artifacts (`.joblib`, `.pkl`) execute code when loaded.** Inspection runs in a disposable child process with a timeout, which isolates crashes and hangs but not OS privileges. Treat model owners as trusted, or set `ALLOW_PICKLE_MODELS=false` to accept only `.skops` files. `.skops` loading rejects types outside scikit-learn, NumPy, SciPy, XGBoost and LightGBM.
+- **Zero egress:** prompts go only to a loopback Ollama unless `ALLOW_REMOTE_LLM=true`; the server logs a warning at startup when a remote host is in use.
+- Passwords are hashed with bcrypt (work factor 12). JWTs are HS256-signed, and `SECRET_KEY` is required and validated.
+- Uploaded files are size-limited, stored under per-user directories with sanitized names, and every file access is checked to resolve inside `STORAGE_DIR`.
 
 ---
 
 ## Verification & Testing
 
-Run unit tests from the `backend/` directory:
-
 ```bash
 cd backend
-python -m pytest tests/ -v
+python -m pytest
 ```
+
+The suite (74 tests) covers:
+- SHAP additivity for random forest, gradient boosting, logistic regression (Kernel) and regressor models, unit detection and global output shapes;
+- prompt building, the faithfulness checker and Ollama streaming via a mocked transport;
+- auth, ingestion limits, dataset validation, model + background registration (including rollback), owner-only background replacement, the ban on predicting background data, batch prediction metrics and export, the RBAC matrix, conversation privacy, deletion cascades, audit metrics, the path sandbox and config validation.
+
+Tests use a temporary database and storage directory and never contact Ollama.
+
+---
+
+## Evaluation Support
+
+- **Per-request telemetry:** SHAP time, LLM time-to-first-token and total latency are stored for every explanation and answer.
+- **Faithfulness:** the rate of answers with zero unverified numbers, the share of verified numbers, 4-part structure compliance and key features cited are reported at `GET /audit/models/{id}/metrics` and in the audit panel.
+- **Export:** CSV export gives one row per LLM answer for the SHAP-only vs SHAP + LLM study.
+
+---
+
+## Deviations from SRS v1.0.1 / SDD v1.0.0
+
+| Item | Documents | Implementation | Reason |
+| :--- | :--- | :--- | :--- |
+| Ports | UI `:3000`, API `:8000` | UI `:3001`, API `:8001` (configurable) | Port conflicts on the development workstation |
+| Model upload route | `/api/v1/models/upload` | same | – |
+| Chat route | `/api/v1/explain/chat`, body `{model_id, instance_context, question}` | `/api/v1/explain/chat` (+ `/stream`), body `{explanation_id, question}` | Grounding on server-stored SHAP values only |
+| Explain request field | `input_data` / `instance_features` | `instance_features`, or `dataset_id` + `row_index` | Row provenance in the audit trail |
+| Model formats | `.joblib`, `.pkl` (proposal also `.h5`) | `.skops`, `.joblib`, `.pkl`; `.h5` out of scope | Safer non-pickle format; Keras is outside the tabular scope |
+| Extra tables | users, model_artifacts, model_shares | + datasets, explanation_records, chat_messages | Background data, audit trail, multi-turn chat |
+| LLM host | localhost:11434 | localhost by default; remote only with `ALLOW_REMOTE_LLM` | Interim remote GPU host |
 
 ---
 
 ## Roadmap & Milestone Progression
 
-- [x] **Milestone 1:** Requirements Analysis & System Design (SRS v1.0.1 & SDD v1.0.0 completed).
-- [x] **Milestone 2:** User Authentication (JWT) & Discretionary Access Control (Model sharing).
-- [x] **Milestone 3:** Model Ingestion, Estimator Introspection & Path Sandboxing.
-- [ ] **Milestone 4:** SHAP Engine Integration (`TreeExplainer` & `KernelExplainer`).
-- [ ] **Milestone 5:** Grounded Gemma Prompt Pipeline & Follow-Up Q&A via Ollama.
-- [ ] **Milestone 6:** React + Vite Dashboard & Plotly Interactive Visualizations.
-- [ ] **Milestone 7:** Usability Evaluation & Statutory Transparency Audit (GDPR/FDA compliance).
+- [x] **Milestone 1:** Requirements Analysis & System Design (SRS v1.0.1 & SDD v1.0.0).
+- [x] **Milestone 2:** User Authentication (JWT) & Discretionary Access Control (grant, list, revoke).
+- [x] **Milestone 3:** Model & Dataset Ingestion, Estimator Introspection, Path Sandboxing, Subprocess Inspection.
+- [x] **Milestone 4:** SHAP Engine (`TreeExplainer` & `KernelExplainer` with reference background, unit detection, global beeswarm).
+- [x] **Milestone 5:** Grounded Gemma Prompt Pipeline, Multi-Turn Follow-Up Q&A, SSE Streaming, Faithfulness Checking.
+- [x] **Milestone 6:** React + Vite Dashboard & Plotly Visualizations (waterfall, force, bar, beeswarm, dependence).
+- [ ] **Milestone 7:** Usability Evaluation (SHAP-only vs SHAP + LLM study) & Statutory Transparency Audit. Tooling is in place (metrics, audit trail, CSV export); the user study is pending.
 
 ---
 

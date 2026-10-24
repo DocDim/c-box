@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr, ConfigDict
 from app.models.artifact import AccessRole
 
@@ -19,7 +20,14 @@ class ModelResponse(BaseModel):
     domain_context: str
     estimator_type: str
     owner_id: int
+    owner_email: Optional[str] = None
     is_owner: bool
     assigned_role: str
     created_at: datetime
+    task_type: str = "unknown"
+    file_format: str = "joblib"
+    n_features: Optional[int] = None
+    feature_names: Optional[List[str]] = None
+    class_labels: Optional[List[str]] = None
+    background_dataset_id: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
