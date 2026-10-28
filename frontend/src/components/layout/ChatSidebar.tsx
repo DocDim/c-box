@@ -13,8 +13,8 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ explanation, activeMod
   if (!explanation) {
     return (
       <div className="bg-slate-800/80 rounded-xl border border-slate-700 p-6 text-center space-y-3">
-        <MessageSquare className="mx-auto text-indigo-400" size={28} />
-        <h3 className="text-sm font-semibold text-white">Grounded AI Narrative</h3>
+        <MessageSquare className="mx-auto text-primary-400" size={28} />
+        <h3 className="text-sm font-semibold text-slate-50">Grounded AI Narrative</h3>
         <p className="text-xs text-slate-400">
           {canExplain(activeModel?.assigned_role)
             ? 'Explain a prediction on the Predict page. The narrative and follow-up chat appear here.'

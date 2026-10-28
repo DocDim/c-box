@@ -60,8 +60,8 @@ export const SharingPanel: React.FC<SharingPanelProps> = ({ model }) => {
 
   return (
     <div className="bg-slate-800/80 p-5 rounded-xl border border-slate-700 shadow-md space-y-3">
-      <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-        <Share2 size={18} className="text-amber-400" /> Access Sharing
+      <h3 className="text-sm font-semibold text-slate-50 flex items-center gap-2">
+        <Share2 size={18} className="text-accent-400" /> Access Sharing
       </h3>
       <p className="text-[11px] text-slate-400">
         VIEWER: predictions only · EXPLAINER: SHAP + LLM · ADMIN: also manage sharing &amp; audit
@@ -75,19 +75,19 @@ export const SharingPanel: React.FC<SharingPanelProps> = ({ model }) => {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="colleague@domain.com"
-          className="flex-1 min-w-[10rem] bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+          className="flex-1 min-w-[10rem] bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-50 focus:outline-none focus:border-accent-500"
         />
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as GrantRole)}
-          className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
+          className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-50"
         >
           {roles.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
         <button
           type="submit"
           disabled={busy}
-          className="bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg"
+          className="bg-accent-600 hover:bg-accent-500 disabled:bg-gray-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg"
         >
           Grant / Update
         </button>
@@ -101,7 +101,7 @@ export const SharingPanel: React.FC<SharingPanelProps> = ({ model }) => {
             <li key={s.user_id} className="flex items-center justify-between py-1.5">
               <span className="text-slate-200 truncate">{s.email}</span>
               <span className="flex items-center gap-2">
-                <span className="font-mono text-[11px] text-amber-300">{s.role}</span>
+                <span className="font-mono text-[11px] text-accent-300">{s.role}</span>
                 {(isOwner || s.role !== 'ADMIN') && (
                   <button
                     onClick={() => handleRevoke(s)}

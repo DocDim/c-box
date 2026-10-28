@@ -13,7 +13,7 @@ interface AuditPanelProps {
 const Stat: React.FC<{ label: string; value: string; hint?: string }> = ({ label, value, hint }) => (
   <div className="bg-slate-900/70 border border-slate-700 rounded-lg p-3">
     <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
-    <div className="text-lg font-semibold text-white font-mono">{value}</div>
+    <div className="text-lg font-semibold text-slate-50 font-mono">{value}</div>
     {hint && <div className="text-[10px] text-slate-500">{hint}</div>}
   </div>
 );
@@ -43,16 +43,16 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ model, refreshKey }) => 
   return (
     <div className="bg-slate-800/80 p-5 rounded-xl border border-slate-700 shadow-md space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-          <ClipboardCheck size={18} className="text-teal-400" /> Audit Trail &amp; Evaluation Metrics
+        <h3 className="text-sm font-semibold text-slate-50 flex items-center gap-2">
+          <ClipboardCheck size={18} className="text-secondary-400" /> Audit Trail &amp; Evaluation Metrics
         </h3>
         <div className="flex gap-2">
-          <button onClick={load} className="text-xs bg-slate-900 border border-slate-700 text-slate-300 hover:text-white px-2.5 py-1 rounded-md flex items-center gap-1">
+          <button onClick={load} className="text-xs bg-gray-600 hover:bg-gray-500 text-white px-2.5 py-1 rounded-md flex items-center gap-1">
             <RefreshCw size={12} /> Refresh
           </button>
           <button
             onClick={() => auditService.exportCsv(model.id).catch((err) => setError(errorMessage(err)))}
-            className="text-xs bg-teal-700 hover:bg-teal-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1"
+            className="text-xs bg-secondary-700 hover:bg-secondary-600 text-white px-2.5 py-1 rounded-md flex items-center gap-1"
           >
             <Download size={12} /> Export CSV
           </button>
@@ -99,7 +99,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ model, refreshKey }) => 
                       <td className="p-2 font-mono">{fmtMs(item.shap_ms)}</td>
                       <td className="p-2">
                         {answers.length}
-                        {flagged && <span className="ml-2 text-amber-400">⚠ grounding issues</span>}
+                        {flagged && <span className="ml-2 text-accent-400">⚠ grounding issues</span>}
                       </td>
                     </tr>
                     {expanded === item.explanation_id && (
@@ -111,7 +111,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ model, refreshKey }) => 
                           <div className="font-mono text-[11px] text-slate-300 break-all">{JSON.stringify(item.input_features)}</div>
                           {item.messages.map((m) =>
                             m.role === 'user' ? (
-                              <div key={m.id} className="text-[11px] text-indigo-300">
+                              <div key={m.id} className="text-[11px] text-primary-300">
                                 <span className="font-semibold">Q: </span>{m.content}
                               </div>
                             ) : (
@@ -120,12 +120,12 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ model, refreshKey }) => 
                                   {m.kind} · {m.llm_model} · {fmtMs(m.latency_ms)}
                                 </div>
                                 {m.faithfulness?.fabricated && (
-                                  <div className="text-amber-400 my-1">
+                                  <div className="text-accent-400 my-1">
                                     ⚠ Unverified numbers: {m.faithfulness.unverified_numbers.join(', ')}
                                   </div>
                                 )}
                                 {m.faithfulness?.direction_errors && (
-                                  <div className="text-amber-400 my-1">
+                                  <div className="text-accent-400 my-1">
                                     ⚠ Wrong section: {(m.faithfulness.misplaced_features ?? [])
                                       .map((x) => `${x.feature} (actually ${x.actual_effect})`).join('; ')}
                                   </div>

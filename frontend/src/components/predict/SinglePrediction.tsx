@@ -83,7 +83,7 @@ export const SinglePrediction: React.FC<SinglePredictionProps> = ({
                 type="text"
                 value={features[col] ?? ''}
                 onChange={(e) => setValue(col, e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-50 font-mono focus:outline-none focus:border-primary-500"
                 placeholder="value"
               />
             </div>
@@ -94,7 +94,7 @@ export const SinglePrediction: React.FC<SinglePredictionProps> = ({
           <button
             type="submit"
             disabled={loading || columns.length === 0}
-            className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5"
+            className="bg-secondary-600 hover:bg-secondary-500 disabled:bg-gray-500 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5"
           >
             <Play size={14} /> {loading ? 'Running…' : 'Predict'}
           </button>
@@ -103,7 +103,7 @@ export const SinglePrediction: React.FC<SinglePredictionProps> = ({
               type="button"
               onClick={explain}
               disabled={explaining || columns.length === 0}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5"
+              className="bg-primary-600 hover:bg-primary-500 disabled:bg-gray-500 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5"
             >
               <Sparkles size={14} /> {explaining ? 'Explaining…' : 'Predict & Explain'}
             </button>
@@ -115,7 +115,7 @@ export const SinglePrediction: React.FC<SinglePredictionProps> = ({
         <div className="p-4 rounded-xl bg-slate-900 border border-slate-700 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Prediction</span>
-            <span className="text-sm font-mono font-bold text-emerald-400">
+            <span className="text-sm font-mono font-bold text-secondary-400">
               {result.predicted_class !== null && result.predicted_class !== undefined
                 ? `Class ${result.predicted_class} · P = ${fmt(result.prediction)}`
                 : `Predicted value: ${fmt(result.prediction)}`}
@@ -130,7 +130,7 @@ export const SinglePrediction: React.FC<SinglePredictionProps> = ({
                 {Object.entries(result.probabilities).map(([cls, p]) => (
                   <div key={cls} className="bg-slate-800 p-2 rounded border border-slate-700/80 flex justify-between text-xs">
                     <span className="font-mono text-slate-300">{cls}</span>
-                    <span className="font-mono text-emerald-400 font-semibold">{(p * 100).toFixed(1)}%</span>
+                    <span className="font-mono text-secondary-400 font-semibold">{(p * 100).toFixed(1)}%</span>
                   </div>
                 ))}
               </div>

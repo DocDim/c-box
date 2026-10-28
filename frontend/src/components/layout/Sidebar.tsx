@@ -36,7 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ page, onNavigate, activeModel,
             key={n.page}
             onClick={() => onNavigate(n.page)}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition ${
-              page === n.page ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'
+              page === n.page ? 'bg-primary-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'
             }`}
           >
             {n.icon} {n.label}
@@ -53,11 +53,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ page, onNavigate, activeModel,
         ) : (
           <>
             <div>
-              <div className="text-sm font-semibold text-white break-words">{activeModel.name}</div>
-              <div className="text-xs text-indigo-300">{activeModel.domain_context}</div>
+              <div className="text-sm font-semibold text-slate-50 break-words">{activeModel.name}</div>
+              <div className="text-xs text-primary-300">{activeModel.domain_context}</div>
             </div>
             <dl className="text-xs">
-              <Row label="Your role"><span className="text-emerald-400 font-medium">{activeModel.assigned_role}</span></Row>
+              <Row label="Your role"><span className="text-secondary-400 font-medium">{activeModel.assigned_role}</span></Row>
               {!activeModel.is_owner && <Row label="Owner">{activeModel.owner_email ?? '—'}</Row>}
               <Row label="Estimator">{activeModel.estimator_type}</Row>
               <Row label="Task">{activeModel.task_type}</Row>
@@ -77,13 +77,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ page, onNavigate, activeModel,
                   {background.target_column && <div className="text-slate-500">target: {background.target_column}</div>}
                 </div>
               ) : (
-                <div className="text-amber-400">None. Non-tree models cannot be explained.</div>
+                <div className="text-accent-400">None. Non-tree models cannot be explained.</div>
               )}
             </div>
 
             {activeModel.feature_names && (
               <details className="text-xs">
-                <summary className="cursor-pointer text-slate-400 hover:text-white">Feature names</summary>
+                <summary className="cursor-pointer text-slate-400 hover:text-slate-50">Feature names</summary>
                 <ul className="mt-1 max-h-40 overflow-y-auto font-mono text-[11px] text-slate-300 space-y-0.5">
                   {activeModel.feature_names.map((f) => <li key={f} className="truncate" title={f}>{f}</li>)}
                 </ul>

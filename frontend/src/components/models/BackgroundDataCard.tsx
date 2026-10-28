@@ -44,8 +44,8 @@ export const BackgroundDataCard: React.FC<BackgroundDataCardProps> = ({ model, b
 
   return (
     <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 space-y-3">
-      <h4 className="text-xs font-semibold text-white flex items-center gap-1.5">
-        <Database size={14} className="text-emerald-400" /> Background data
+      <h4 className="text-xs font-semibold text-slate-50 flex items-center gap-1.5">
+        <Database size={14} className="text-secondary-400" /> Background data
       </h4>
       <p className="text-[11px] text-slate-400">
         Reference distribution for SHAP explanations and Global Insights. Predictions never run on it.
@@ -59,7 +59,7 @@ export const BackgroundDataCard: React.FC<BackgroundDataCardProps> = ({ model, b
           <dt className="text-slate-500">Loaded</dt><dd className="text-slate-200">{fmtDate(background.created_at)}</dd>
         </dl>
       ) : (
-        <p className="text-xs text-amber-400">
+        <p className="text-xs text-accent-400">
           No background data. Non-tree models cannot be explained and Global Insights are unavailable.
         </p>
       )}
@@ -67,25 +67,25 @@ export const BackgroundDataCard: React.FC<BackgroundDataCardProps> = ({ model, b
       {model.is_owner ? (
         <form onSubmit={submit} className="space-y-2">
           {error && <div className="text-xs text-rose-400 bg-rose-950/40 p-2 rounded border border-rose-800">{error}</div>}
-          {notice && <div className="text-xs text-emerald-300">{notice}</div>}
+          {notice && <div className="text-xs text-secondary-300">{notice}</div>}
           <input
             key={inputKey}
             type="file"
             accept=".csv"
             onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="w-full text-xs text-slate-400 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white cursor-pointer"
+            className="w-full text-xs text-slate-400 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-secondary-600 file:text-white cursor-pointer"
           />
           <div className="flex gap-2">
             <input
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               placeholder="Target column (optional)"
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-50"
             />
             <button
               type="submit"
               disabled={!file || busy}
-              className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1"
+              className="bg-secondary-600 hover:bg-secondary-500 disabled:bg-gray-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1"
             >
               <RefreshCw size={12} /> {busy ? 'Validating…' : background ? 'Replace' : 'Upload'}
             </button>

@@ -51,7 +51,7 @@ export const PredictPage: React.FC<PredictPageProps> = ({
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex-1 min-w-[16rem]">
             <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
-              <FlaskConical size={14} className="text-indigo-400" /> Model used for this prediction
+              <FlaskConical size={14} className="text-primary-400" /> Model used for this prediction
             </label>
             <select
               value={model?.id ?? ''}
@@ -59,7 +59,7 @@ export const PredictPage: React.FC<PredictPageProps> = ({
                 const m = models.find((x) => x.id === Number(e.target.value));
                 if (m) onSelectModel(m);
               }}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white"
+              className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-slate-50"
             >
               {models.length === 0 && <option value="">No models available. Register one first.</option>}
               {models.map((m) => (
@@ -72,13 +72,13 @@ export const PredictPage: React.FC<PredictPageProps> = ({
           <div className="flex bg-slate-900 border border-slate-700 rounded-lg p-1 text-xs">
             <button
               onClick={() => setMode('single')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${mode === 'single' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${mode === 'single' ? 'bg-primary-600 text-white' : 'text-slate-400 hover:text-slate-50'}`}
             >
               <TextCursorInput size={14} /> Single data point
             </button>
             <button
               onClick={() => setMode('batch')}
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${mode === 'batch' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${mode === 'batch' ? 'bg-primary-600 text-white' : 'text-slate-400 hover:text-slate-50'}`}
             >
               <Table2 size={14} /> Batch (dataset)
             </button>
@@ -86,7 +86,7 @@ export const PredictPage: React.FC<PredictPageProps> = ({
         </div>
 
         {model && !allowExplain && (
-          <div className="text-xs text-amber-300 bg-amber-950/40 border border-amber-800 rounded-lg p-2.5">
+          <div className="text-xs text-accent-300 bg-accent-950/40 border border-accent-800 rounded-lg p-2.5">
             VIEWER access: predictions only. SHAP and LLM explanations require EXPLAINER access.
           </div>
         )}

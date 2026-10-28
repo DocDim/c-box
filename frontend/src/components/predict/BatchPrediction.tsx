@@ -100,7 +100,7 @@ export const BatchPrediction: React.FC<BatchPredictionProps> = ({
             <select
               value={datasetId ?? ''}
               onChange={(e) => { setDatasetId(Number(e.target.value)); setResult(null); }}
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-50"
             >
               {datasets.length === 0 && <option value="">No datasets yet: upload one</option>}
               {datasets.map((d) => (
@@ -112,7 +112,7 @@ export const BatchPrediction: React.FC<BatchPredictionProps> = ({
             <button
               onClick={() => datasetId && run(datasetId, 0)}
               disabled={!datasetId || loading}
-              className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1"
+              className="bg-secondary-600 hover:bg-secondary-500 disabled:bg-gray-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1"
             >
               <Play size={13} /> {loading ? 'Running…' : 'Run batch'}
             </button>
@@ -121,26 +121,26 @@ export const BatchPrediction: React.FC<BatchPredictionProps> = ({
 
         <form onSubmit={upload} className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 space-y-2">
           <label className="block text-xs font-medium text-slate-300 flex items-center gap-1.5">
-            <FileSpreadsheet size={14} className="text-emerald-400" /> Or load a new CSV to predict
+            <FileSpreadsheet size={14} className="text-secondary-400" /> Or load a new CSV to predict
           </label>
           <input
             key={inputKey}
             type="file"
             accept=".csv"
             onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="w-full text-xs text-slate-400 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white cursor-pointer"
+            className="w-full text-xs text-slate-400 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-secondary-600 file:text-white cursor-pointer"
           />
           <div className="flex gap-2">
             <input
               value={target}
               onChange={(e) => setTarget(e.target.value)}
               placeholder="Target column (optional, enables accuracy)"
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-50"
             />
             <button
               type="submit"
               disabled={!file || uploading}
-              className="bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg"
+              className="bg-primary-600 hover:bg-primary-500 disabled:opacity-50 disabled:hover:bg-primary-600 disabled:cursor-not-allowed text-white text-xs font-semibold px-3 py-1.5 rounded-lg"
             >
               {uploading ? 'Uploading…' : 'Upload & run'}
             </button>
@@ -155,26 +155,26 @@ export const BatchPrediction: React.FC<BatchPredictionProps> = ({
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="bg-slate-900/70 border border-slate-700 rounded-lg p-3">
               <div className="text-[10px] uppercase text-slate-400">Rows predicted</div>
-              <div className="text-lg font-mono text-white">{result.total_rows}</div>
+              <div className="text-lg font-mono text-slate-50">{result.total_rows}</div>
               <div className="text-[10px] text-slate-500">in {fmtMs(result.predict_ms)}</div>
             </div>
             {result.metrics?.accuracy !== undefined && (
               <div className="bg-slate-900/70 border border-slate-700 rounded-lg p-3">
                 <div className="text-[10px] uppercase text-slate-400">Accuracy vs “{result.target_column}”</div>
-                <div className="text-lg font-mono text-emerald-400">{fmtPct(result.metrics.accuracy)}</div>
+                <div className="text-lg font-mono text-secondary-400">{fmtPct(result.metrics.accuracy)}</div>
               </div>
             )}
             {result.metrics?.mae !== undefined && (
               <div className="bg-slate-900/70 border border-slate-700 rounded-lg p-3">
                 <div className="text-[10px] uppercase text-slate-400">MAE / RMSE</div>
-                <div className="text-lg font-mono text-white">{fmt(result.metrics.mae, 3)} / {fmt(result.metrics.rmse, 3)}</div>
+                <div className="text-lg font-mono text-slate-50">{fmt(result.metrics.mae, 3)} / {fmt(result.metrics.rmse, 3)}</div>
                 {result.metrics.r2 !== undefined && <div className="text-[10px] text-slate-500">R² {fmt(result.metrics.r2, 3)}</div>}
               </div>
             )}
             {result.prediction_stats && (
               <div className="bg-slate-900/70 border border-slate-700 rounded-lg p-3">
                 <div className="text-[10px] uppercase text-slate-400">Prediction range</div>
-                <div className="text-sm font-mono text-white">{fmt(result.prediction_stats.min, 2)} … {fmt(result.prediction_stats.max, 2)}</div>
+                <div className="text-sm font-mono text-slate-50">{fmt(result.prediction_stats.min, 2)} … {fmt(result.prediction_stats.max, 2)}</div>
                 <div className="text-[10px] text-slate-500">mean {fmt(result.prediction_stats.mean, 3)}</div>
               </div>
             )}
@@ -185,7 +185,7 @@ export const BatchPrediction: React.FC<BatchPredictionProps> = ({
                   <div key={cls} className="flex items-center gap-2 text-[11px]">
                     <span className="w-16 font-mono text-slate-300 truncate">{cls}</span>
                     <div className="flex-1 bg-slate-800 rounded h-2">
-                      <div className="bg-indigo-500 h-2 rounded" style={{ width: `${(n / result.total_rows) * 100}%` }} />
+                      <div className="bg-primary-500 h-2 rounded" style={{ width: `${(n / result.total_rows) * 100}%` }} />
                     </div>
                     <span className="w-10 text-right font-mono text-slate-400">{n}</span>
                   </div>
@@ -202,15 +202,15 @@ export const BatchPrediction: React.FC<BatchPredictionProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => explainService.exportBatchCsv(model.id, dataset.id, `${dataset.name.replace(/\.csv$/i, '')}_predictions.csv`).catch((err) => setError(errorMessage(err)))}
-                className="bg-slate-900 border border-slate-700 hover:text-white px-2.5 py-1 rounded-md flex items-center gap-1"
+                className="bg-gray-600 hover:bg-gray-500 text-white px-2.5 py-1 rounded-md flex items-center gap-1"
               >
                 <Download size={12} /> Export CSV
               </button>
-              <button disabled={page === 0 || loading} onClick={() => run(dataset.id, page - 1)} className="p-1 rounded bg-slate-900 border border-slate-700 disabled:opacity-40" aria-label="Previous page">
+              <button disabled={page === 0 || loading} onClick={() => run(dataset.id, page - 1)} className="p-1 rounded bg-gray-600 hover:bg-gray-500 text-white disabled:opacity-40" aria-label="Previous page">
                 <ChevronLeft size={14} />
               </button>
               <span className="font-mono">{page + 1} / {totalPages}</span>
-              <button disabled={page + 1 >= totalPages || loading} onClick={() => run(dataset.id, page + 1)} className="p-1 rounded bg-slate-900 border border-slate-700 disabled:opacity-40" aria-label="Next page">
+              <button disabled={page + 1 >= totalPages || loading} onClick={() => run(dataset.id, page + 1)} className="p-1 rounded bg-gray-600 hover:bg-gray-500 text-white disabled:opacity-40" aria-label="Next page">
                 <ChevronRight size={14} />
               </button>
             </div>
@@ -223,7 +223,7 @@ export const BatchPrediction: React.FC<BatchPredictionProps> = ({
                   <th className="p-2">#</th>
                   <th className="p-2">{isClassification ? 'Predicted' : 'Prediction'}</th>
                   {isClassification && <th className="p-2">P</th>}
-                  {result.target_column && <th className="p-2 text-amber-400">{result.target_column}</th>}
+                  {result.target_column && <th className="p-2 text-accent-400">{result.target_column}</th>}
                   {featureCols.map((c) => <th key={c} className="p-2 font-mono whitespace-nowrap">{c}</th>)}
                   {allowExplain && <th className="p-2 text-right">SHAP</th>}
                 </tr>
@@ -233,12 +233,12 @@ export const BatchPrediction: React.FC<BatchPredictionProps> = ({
                   const match = sameLabel(row.actual, row.predicted_class);
                   const active = explainedRow?.datasetId === dataset.id && explainedRow.rowIndex === row.row_index;
                   return (
-                    <tr key={row.row_index} className={`border-b border-slate-800/60 ${active ? 'bg-indigo-950/60' : 'hover:bg-slate-700/30'}`}>
+                    <tr key={row.row_index} className={`border-b border-slate-800/60 ${active ? 'bg-primary-950/60' : 'hover:bg-slate-700/30'}`}>
                       <td className="p-2 font-mono text-slate-500">{row.row_index}</td>
-                      <td className="p-2 font-mono text-white">{row.predicted_class ?? fmt(row.prediction, 3)}</td>
-                      {isClassification && <td className="p-2 font-mono text-emerald-400">{fmtPct(row.prediction)}</td>}
+                      <td className="p-2 font-mono text-slate-50">{row.predicted_class ?? fmt(row.prediction, 3)}</td>
+                      {isClassification && <td className="p-2 font-mono text-secondary-400">{fmtPct(row.prediction)}</td>}
                       {result.target_column && (
-                        <td className={`p-2 font-mono ${match === false ? 'text-rose-400' : match ? 'text-emerald-400' : ''}`}>
+                        <td className={`p-2 font-mono ${match === false ? 'text-rose-400' : match ? 'text-secondary-400' : ''}`}>
                           {row.actual === null || row.actual === undefined ? '—' : String(row.actual)}
                           {match === false && ' ✗'}
                         </td>
@@ -252,7 +252,7 @@ export const BatchPrediction: React.FC<BatchPredictionProps> = ({
                             disabled={explaining}
                             onClick={() => onExplainRow(dataset.id, row.row_index)}
                             className={`px-2.5 py-1 rounded text-[11px] font-medium flex items-center gap-1 ml-auto ${
-                              active ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                              active ? 'bg-primary-600 text-white' : 'bg-gray-600 hover:bg-gray-500 text-white'
                             }`}
                           >
                             <Sparkles size={11} /> {active ? 'Explained' : 'Explain'}

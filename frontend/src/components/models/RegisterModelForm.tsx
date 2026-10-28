@@ -8,7 +8,7 @@ interface RegisterModelFormProps {
 }
 
 const inputClass =
-  'w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500';
+  'w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-50 focus:outline-none focus:border-primary-500';
 const fileClass =
   'w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:text-white cursor-pointer';
 
@@ -53,8 +53,8 @@ export const RegisterModelForm: React.FC<RegisterModelFormProps> = ({ onRegister
 
   return (
     <div className="bg-slate-800/80 p-5 rounded-xl border border-slate-700 shadow-md">
-      <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
-        <UploadCloud size={18} className="text-indigo-400" /> Register a Model
+      <h3 className="text-sm font-semibold text-slate-50 mb-1 flex items-center gap-2">
+        <UploadCloud size={18} className="text-primary-400" /> Register a Model
       </h3>
       <p className="text-[11px] text-slate-400 mb-4">
         The background dataset is the reference distribution SHAP compares predictions against. It must contain
@@ -86,7 +86,7 @@ export const RegisterModelForm: React.FC<RegisterModelFormProps> = ({ onRegister
             type="file"
             accept=".skops,.joblib,.pkl"
             onChange={(e) => setModelFile(e.target.files?.[0] || null)}
-            className={`${fileClass} file:bg-indigo-600 hover:file:bg-indigo-500`}
+            className={`${fileClass} file:bg-primary-600 hover:file:bg-primary-500`}
           />
           <p className="text-[10px] text-slate-500 mt-1">Pickle formats can run code when loaded. Upload only trusted models.</p>
         </div>
@@ -99,7 +99,7 @@ export const RegisterModelForm: React.FC<RegisterModelFormProps> = ({ onRegister
             type="file"
             accept=".csv"
             onChange={(e) => setBackgroundFile(e.target.files?.[0] || null)}
-            className={`${fileClass} file:bg-emerald-600 hover:file:bg-emerald-500`}
+            className={`${fileClass} file:bg-secondary-600 hover:file:bg-secondary-500`}
           />
           <input
             value={targetColumn}
@@ -113,7 +113,7 @@ export const RegisterModelForm: React.FC<RegisterModelFormProps> = ({ onRegister
           <button
             type="submit"
             disabled={loading}
-            className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-white font-medium px-5 py-2 rounded-lg text-xs transition shadow"
+            className="bg-primary-600 hover:bg-primary-500 disabled:bg-gray-500 text-white font-medium px-5 py-2 rounded-lg text-xs transition shadow"
           >
             {loading ? 'Validating model and background…' : 'Register Model'}
           </button>

@@ -3,6 +3,7 @@ import Plot from 'react-plotly.js';
 import { InstanceExplainResponse } from '../../types/api';
 import { fmt } from '../../utils/format';
 import { SHAP_NEGATIVE, SHAP_POSITIVE } from './WaterfallPlot';
+import { useChartColors } from '../../hooks/useTheme';
 
 interface ForcePlotProps {
   result: InstanceExplainResponse;
@@ -13,6 +14,7 @@ interface ForcePlotProps {
  * push it down and start at f(x). Segment width is |phi|.
  */
 export const ForcePlot: React.FC<ForcePlotProps> = ({ result }) => {
+  const c = useChartColors();
   const fx = result.explained_output;
   const positives = result.feature_contributions
     .filter((c) => c.shap_value > 0)
@@ -44,7 +46,7 @@ export const ForcePlot: React.FC<ForcePlotProps> = ({ result }) => {
       y: items.map(() => 'force'),
       x: widths,
       base: bases,
-      marker: { color, line: { color: '#0f172a', width: 1 } },
+      marker: { color, line: { color: c.outline, width: 1 } },
       text: items.map((c) => (Math.abs(c.shap_value) / total > 0.12 ? c.feature : '')),
       textposition: 'inside',
       insidetextanchor: 'middle',
@@ -78,15 +80,15 @@ export const ForcePlot: React.FC<ForcePlotProps> = ({ result }) => {
           margin: { l: 10, r: 10, t: 30, b: 30 },
           paper_bgcolor: 'transparent',
           plot_bgcolor: 'transparent',
-          xaxis: { gridcolor: '#334155', tickfont: { color: '#94a3b8', size: 10 }, zeroline: false },
+          xaxis: { gridcolor: c.grid, tickfont: { color: c.tick, size: 10 }, zeroline: false },
           yaxis: { visible: false },
           shapes: [
-            { type: 'line', x0: fx, x1: fx, yref: 'paper', y0: 0, y1: 1, line: { color: '#e2e8f0', width: 2 } },
-            { type: 'line', x0: result.base_value, x1: result.base_value, yref: 'paper', y0: 0, y1: 1, line: { color: '#94a3b8', width: 1, dash: 'dot' } },
+            { type: 'line', x0: fx, x1: fx, yref: 'paper', y0: 0, y1: 1, line: { color: c.strong, width: 2 } },
+            { type: 'line', x0: result.base_value, x1: result.base_value, yref: 'paper', y0: 0, y1: 1, line: { color: c.tick, width: 1, dash: 'dot' } },
           ],
           annotations: [
-            { x: fx, y: 1.15, yref: 'paper', text: `f(x) = ${fmt(fx, 3)}`, showarrow: false, font: { color: '#e2e8f0', size: 11 } },
-            { x: result.base_value, y: -0.35, yref: 'paper', text: 'base value', showarrow: false, font: { color: '#94a3b8', size: 10 } },
+            { x: fx, y: 1.15, yref: 'paper', text: `f(x) = ${fmt(fx, 3)}`, showarrow: false, font: { color: c.strong, size: 11 } },
+            { x: result.base_value, y: -0.35, yref: 'paper', text: 'base value', showarrow: false, font: { color: c.tick, size: 10 } },
           ],
         }}
         config={{ displayModeBar: false, responsive: true }}

@@ -3,10 +3,11 @@ import Plot from 'react-plotly.js';
 import { InstanceExplainResponse } from '../../types/api';
 import { Target, Activity } from 'lucide-react';
 import { fmt, fmtMs } from '../../utils/format';
+import { useChartColors } from '../../hooks/useTheme';
 
 // SHAP's convention: red pushes the output up, blue pushes it down
-export const SHAP_POSITIVE = '#ff0051';
-export const SHAP_NEGATIVE = '#008bfb';
+export const SHAP_POSITIVE = '#046c1f';
+export const SHAP_NEGATIVE = '#dd2100';
 const MAX_BARS = 10;
 
 interface WaterfallPlotProps {
@@ -17,6 +18,7 @@ const valueLabel = (v: number | string | null) =>
   v === null ? '—' : typeof v === 'number' ? String(Number(v.toFixed(4))) : v;
 
 export const WaterfallPlot: React.FC<WaterfallPlotProps> = ({ result }) => {
+  const c = useChartColors();
   const contributions = result.feature_contributions;
   const shown = contributions.slice(0, MAX_BARS);
   const rest = contributions.slice(MAX_BARS);
@@ -51,8 +53,8 @@ export const WaterfallPlot: React.FC<WaterfallPlotProps> = ({ result }) => {
     cliponaxis: false,
     increasing: { marker: { color: SHAP_POSITIVE } },
     decreasing: { marker: { color: SHAP_NEGATIVE } },
-    totals: { marker: { color: '#6366f1' } },
-    connector: { line: { color: '#475569', width: 1 } },
+    totals: { marker: { color: '#009ddd' } },
+    connector: { line: { color: c.connector, width: 1 } },
     hovertemplate: '%{y}<br>%{x:.4f}<extra></extra>',
   };
 
@@ -60,17 +62,17 @@ export const WaterfallPlot: React.FC<WaterfallPlotProps> = ({ result }) => {
     <div className="bg-slate-800/80 p-5 rounded-xl border border-slate-700 shadow-lg space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-slate-900/90 border border-slate-700">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+          <div className="p-2.5 rounded-lg bg-primary-500/20 text-primary-400 border border-primary-500/30">
             <Target size={22} />
           </div>
           <div>
             <span className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Model Prediction</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-xl font-bold text-white">
+              <span className="text-xl font-bold text-slate-50">
                 {isClassification ? `Class ${result.predicted_class}` : fmt(result.prediction)}
               </span>
               {isClassification && (
-                <span className="text-xs text-emerald-400 font-mono font-bold">
+                <span className="text-xs text-secondary-400 font-mono font-bold">
                   P = {(result.prediction * 100).toFixed(1)}%
                 </span>
               )}
@@ -85,11 +87,11 @@ export const WaterfallPlot: React.FC<WaterfallPlotProps> = ({ result }) => {
           </div>
           <div className="text-right border-l border-slate-700 pl-4">
             <span className="text-slate-400 block text-[10px] uppercase font-sans">Σ SHAP (all features)</span>
-            <span className="text-indigo-400 font-semibold">{attributionSum >= 0 ? '+' : ''}{fmt(attributionSum)}</span>
+            <span className="text-primary-400 font-semibold">{attributionSum >= 0 ? '+' : ''}{fmt(attributionSum)}</span>
           </div>
           <div className="text-right border-l border-slate-700 pl-4">
             <span className="text-slate-400 block text-[10px] uppercase font-sans">f(x)</span>
-            <span className="text-white font-semibold">{fmt(result.explained_output)}</span>
+            <span className="text-slate-50 font-semibold">{fmt(result.explained_output)}</span>
           </div>
         </div>
       </div>
@@ -104,7 +106,7 @@ export const WaterfallPlot: React.FC<WaterfallPlotProps> = ({ result }) => {
             {Object.entries(result.probabilities).map(([cls, prob]) => (
               <div key={cls} className="bg-slate-800/80 px-2.5 py-1.5 rounded border border-slate-700 flex justify-between items-center">
                 <span className="font-mono text-slate-300 truncate mr-2">{cls}</span>
-                <span className="font-mono font-bold text-emerald-400">{(prob * 100).toFixed(1)}%</span>
+                <span className="font-mono font-bold text-secondary-400">{(prob * 100).toFixed(1)}%</span>
               </div>
             ))}
           </div>
@@ -128,12 +130,12 @@ export const WaterfallPlot: React.FC<WaterfallPlotProps> = ({ result }) => {
             plot_bgcolor: 'transparent',
             showlegend: false,
             xaxis: {
-              title: { text: `Model output (${result.output_units})`, font: { size: 11, color: '#94a3b8' } },
-              gridcolor: '#334155',
-              tickfont: { color: '#94a3b8', size: 10 },
+              title: { text: `Model output (${result.output_units})`, font: { size: 11, color: c.tick } },
+              gridcolor: c.grid,
+              tickfont: { color: c.tick, size: 10 },
               zeroline: false,
             },
-            yaxis: { automargin: true, tickfont: { color: '#cbd5e1', size: 11 } },
+            yaxis: { automargin: true, tickfont: { color: c.label, size: 11 } },
           }}
           config={{ displayModeBar: false, responsive: true }}
           useResizeHandler={true}

@@ -51,7 +51,7 @@ export const ModelsPage: React.FC<ModelsPageProps> = ({
       <RegisterModelForm onRegistered={onModelRegistered} />
 
       <div className="bg-slate-800/80 p-5 rounded-xl border border-slate-700 shadow-md">
-        <h3 className="text-sm font-semibold text-white mb-3">Your Models</h3>
+        <h3 className="text-sm font-semibold text-slate-50 mb-3">Your Models</h3>
         {error && <div className="text-xs text-rose-400 mb-2">{error}</div>}
         {models.length === 0 ? (
           <p className="text-xs text-slate-500 italic">No models yet. Register one above, or ask a colleague to share one.</p>
@@ -62,35 +62,35 @@ export const ModelsPage: React.FC<ModelsPageProps> = ({
               const background = datasets.find((d) => d.id === m.background_dataset_id);
               const open = expanded === m.id;
               return (
-                <li key={m.id} className={`rounded-lg border ${isActive ? 'border-indigo-500 bg-indigo-950/30' : 'border-slate-700 bg-slate-900/40'}`}>
+                <li key={m.id} className={`rounded-lg border ${isActive ? 'border-primary-500 bg-primary-950/30' : 'border-slate-700 bg-slate-900/40'}`}>
                   <div className="flex flex-wrap items-center gap-3 p-3">
                     <div className="flex-1 min-w-[12rem]">
-                      <div className="text-sm text-white font-medium">
-                        {m.name} {isActive && <span className="ml-1 text-[10px] uppercase text-indigo-300">active</span>}
+                      <div className="text-sm text-slate-50 font-medium">
+                        {m.name} {isActive && <span className="ml-1 text-[10px] uppercase text-primary-300">active</span>}
                       </div>
                       <div className="text-[11px] text-slate-400">
                         {m.estimator_type} · {m.task_type} · {m.n_features ?? '?'} features · {m.domain_context}
                       </div>
                       <div className="text-[11px] text-slate-500">
                         {m.is_owner ? 'Owned by you' : `Shared by ${m.owner_email ?? 'owner'}`} · role{' '}
-                        <span className="text-emerald-400">{m.assigned_role}</span> · background{' '}
-                        <span className={background ? 'text-slate-300' : 'text-amber-400'}>{background ? background.name : 'none'}</span>
+                        <span className="text-secondary-400">{m.assigned_role}</span> · background{' '}
+                        <span className={background ? 'text-slate-300' : 'text-accent-400'}>{background ? background.name : 'none'}</span>
                         {' · '}added {fmtDate(m.created_at)}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {!isActive && (
-                        <button onClick={() => onActivate(m)} className="text-xs px-3 py-1.5 rounded-md bg-slate-800 border border-slate-600 text-slate-200 hover:bg-slate-700">
+                        <button onClick={() => onActivate(m)} className="text-xs px-3 py-1.5 rounded-md bg-accent-600 hover:bg-accent-500 text-white">
                           Set active
                         </button>
                       )}
-                      <button onClick={() => onPredict(m)} className="text-xs px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1">
+                      <button onClick={() => onPredict(m)} className="text-xs px-3 py-1.5 rounded-md bg-primary-600 hover:bg-primary-500 text-white flex items-center gap-1">
                         <FlaskConical size={12} /> Predict
                       </button>
                       {canManage(m.assigned_role) && (
                         <button
                           onClick={() => setExpanded(open ? null : m.id)}
-                          className="text-xs px-2 py-1.5 rounded-md text-slate-300 hover:text-white flex items-center gap-1"
+                          className="text-xs px-2 py-1.5 rounded-md bg-secondary-600 hover:bg-secondary-500 text-white flex items-center gap-1"
                         >
                           Manage {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         </button>
@@ -105,7 +105,7 @@ export const ModelsPage: React.FC<ModelsPageProps> = ({
                         {m.is_owner && (
                           <button
                             onClick={() => remove(m)}
-                            className="text-[11px] text-rose-300 hover:text-white hover:bg-rose-700 border border-rose-800 px-2.5 py-1 rounded-md flex items-center gap-1"
+                            className="text-[11px] bg-rose-600 hover:bg-rose-500 text-white px-2.5 py-1 rounded-md flex items-center gap-1"
                           >
                             <Trash2 size={12} /> Delete model
                           </button>

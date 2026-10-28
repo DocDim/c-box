@@ -14,7 +14,7 @@ const FaithfulnessBadge: React.FC<{ f: Faithfulness; kind: string }> = ({ f, kin
   const ok = !f.fabricated && !f.direction_errors;
   return (
     <div className={`mt-2 text-[10px] rounded-md px-2 py-1 border flex flex-wrap items-center gap-x-3 gap-y-1 ${
-      ok ? 'border-emerald-800 bg-emerald-950/40 text-emerald-300' : 'border-amber-700 bg-amber-950/40 text-amber-300'
+      ok ? 'border-secondary-800 bg-secondary-950/40 text-secondary-300' : 'border-accent-700 bg-accent-950/40 text-accent-300'
     }`}>
       <span className="flex items-center gap-1 font-semibold">
         {ok ? <ShieldCheck size={12} /> : <ShieldAlert size={12} />}
@@ -113,11 +113,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 
   return (
     <div className="bg-slate-800/80 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col h-full min-h-[28rem]">
       <div className="flex items-center justify-between pb-3 border-b border-slate-700 mb-3">
-        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-          <Bot size={18} className="text-indigo-400" />
+        <h3 className="text-sm font-semibold text-slate-50 flex items-center gap-2">
+          <Bot size={18} className="text-primary-400" />
           Grounded AI Narrative
         </h3>
-        <span className="text-[11px] font-mono bg-indigo-950 text-indigo-300 border border-indigo-800 px-2 py-0.5 rounded">
+        <span className="text-[11px] font-mono bg-primary-950 text-primary-300 border border-primary-800 px-2 py-0.5 rounded">
           {llmLabel}
         </span>
       </div>
@@ -126,7 +126,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 
         {messages.map((m) => (
           <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : ''}>
             {m.role === 'user' ? (
-              <div className="max-w-[85%] bg-indigo-600/30 border border-indigo-700 rounded-lg px-3 py-2 text-xs text-indigo-100 flex gap-2">
+              <div className="max-w-[85%] bg-primary-600/30 border border-primary-700 rounded-lg px-3 py-2 text-xs text-primary-100 flex gap-2">
                 <UserIcon size={14} className="shrink-0 mt-0.5" /> {m.content}
               </div>
             ) : (
@@ -143,7 +143,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 
 
         {pendingQuestion && (
           <div className="flex justify-end">
-            <div className="max-w-[85%] bg-indigo-600/30 border border-indigo-700 rounded-lg px-3 py-2 text-xs text-indigo-100">
+            <div className="max-w-[85%] bg-primary-600/30 border border-primary-700 rounded-lg px-3 py-2 text-xs text-primary-100">
               {pendingQuestion}
             </div>
           </div>
@@ -153,7 +153,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 
           <div className="text-xs leading-relaxed text-slate-200">
             {streamingText ? renderMarkdown(streamingText) : (
               <div className="flex items-center gap-2 text-slate-400 py-4">
-                <Sparkles className="animate-spin text-indigo-400" size={16} />
+                <Sparkles className="animate-spin text-primary-400" size={16} />
                 {hasNarrative ? 'Answering…' : 'Synthesizing grounded SHAP narrative…'}
               </div>
             )}
@@ -164,7 +164,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 
           <div className="text-xs text-rose-400 bg-rose-950/40 p-2.5 rounded-lg border border-rose-800 space-y-2">
             <p>{error}</p>
             {!hasNarrative && (
-              <button onClick={() => run()} className="underline text-rose-300 hover:text-white">Retry</button>
+              <button onClick={() => run()} className="underline text-rose-300 hover:text-slate-50">Retry</button>
             )}
           </div>
         )}
@@ -179,12 +179,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={hasNarrative ? 'e.g., Which feature change would flip this decision?' : 'Waiting for the narrative…'}
-          className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+          className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-50 focus:outline-none focus:border-primary-500 disabled:opacity-50"
         />
         <button
           type="submit"
           disabled={!hasNarrative || busy || !query.trim()}
-          className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 text-white px-3 py-2 rounded-lg text-xs transition flex items-center gap-1 shadow"
+          className="bg-primary-600 hover:bg-primary-500 disabled:bg-gray-500 text-white px-3 py-2 rounded-lg text-xs transition flex items-center gap-1 shadow"
         >
           <Send size={14} /> Send
         </button>
