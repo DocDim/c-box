@@ -64,6 +64,9 @@ class ChatMessage(Base):
     )
     role: Mapped[str] = mapped_column(String(16), nullable=False)  # "user" | "assistant"
     kind: Mapped[str] = mapped_column(String(16), nullable=False)  # "narrative" | "followup"
+    # Reader the prompt was written for; each audience has its own narrative and follow-ups.
+    # NULL rows predate audiences and were written for decision-makers.
+    audience: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Assistant-only telemetry used for the evaluation report

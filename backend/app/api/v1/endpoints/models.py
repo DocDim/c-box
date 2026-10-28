@@ -9,7 +9,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.artifact import ModelArtifact, ModelShare, AccessRole
 from app.models.dataset import PURPOSE_BACKGROUND, Dataset
-from app.schemas.artifact import ModelResponse, ShareGrantRequest, SharedUserResponse
+from app.schemas.artifact import ModelMetadataUpdate, ModelResponse, ShareGrantRequest, SharedUserResponse
 from app.core.dependencies import get_current_user
 from app.core.explainer_cache import explainer_cache
 from app.core.dataset_ingest import ingest_csv_upload
@@ -28,6 +28,8 @@ def to_model_response(m: ModelArtifact, role: str, owner_email: Optional[str] = 
         task_type=m.task_type, file_format=m.file_format, n_features=m.n_features,
         feature_names=m.feature_names, class_labels=m.class_labels,
         background_dataset_id=m.background_dataset_id,
+        feature_glossary=m.feature_glossary, outcome_description=m.outcome_description,
+        class_descriptions=m.class_descriptions, decision_context=m.decision_context,
     )
 
 
@@ -179,6 +181,38 @@ async def replace_background_dataset(
     explainer_cache.invalidate(model_id)
     if stale_path:
         delete_stored_file(stale_path)
+    return to_model_response(model, OWNER_ROLE, current_user.email)
+
+
+def _clean_mapping(values: dict, allowed: Optional[List[str]], what: str) -> Optional[dict]:
+    cleaned = {str(k): v.strip()[:255] for k, v in values.items() if v and v.strip()}
+    unknown = sorted(set(cleaned) - set(allowed or []))
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unknown {what}: {', '.join(unknown[:5])}."
+        )
+    return cleaned or None
+
+
+@router.put("/{model_id}/metadata", response_model=ModelResponse)
+async def update_model_metadata(
+    model_id: int,
+    payload: ModelMetadataUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Owner-only: replaces the business context (feature glossary, outcome and class
+    descriptions, decision context) the LLM prompt layer uses to adapt narratives.
+    """
+    model = await verify_model_access(model_id, current_user, db, require_owner=True)
+    model.feature_glossary = _clean_mapping(payload.feature_glossary, model.feature_names, "features")
+    model.class_descriptions = _clean_mapping(payload.class_descriptions, model.class_labels, "classes")
+    model.outcome_description = (payload.outcome_description or "").strip() or None
+    model.decision_context = (payload.decision_context or "").strip() or None
+    await db.commit()
+    await db.refresh(model)
     return to_model_response(model, OWNER_ROLE, current_user.email)
 
 

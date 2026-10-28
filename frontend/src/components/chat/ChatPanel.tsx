@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bot, Send, ShieldAlert, ShieldCheck, Sparkles, User as UserIcon } from 'lucide-react';
-import { ChatMessage, Faithfulness } from '../../types/api';
+import { Audience, ChatMessage, Faithfulness } from '../../types/api';
 import { errorMessage, explainService } from '../../services/api';
 import { fmtMs } from '../../utils/format';
 import { renderMarkdown } from '../../utils/markdown';
@@ -9,6 +9,23 @@ interface ChatPanelProps {
   explanationId: string;
   llmLabel?: string;
 }
+
+const AUDIENCES: { value: Audience; label: string; hint: string }[] = [
+  { value: 'decision_maker', label: 'Decision-maker', hint: 'Plain language, business terms, one recommended action' },
+  { value: 'domain_analyst', label: 'Analyst', hint: 'Values and effect sizes, with points to verify' },
+  { value: 'data_scientist', label: 'Data scientist', hint: 'SHAP values, units, diagnostics and caveats' },
+];
+const AUDIENCE_KEY = 'chatAudience';
+
+const readAudience = (): Audience => {
+  try {
+    const saved = localStorage.getItem(AUDIENCE_KEY);
+    if (AUDIENCES.some((a) => a.value === saved)) return saved as Audience;
+  } catch {
+    // storage unavailable: use the default reader
+  }
+  return 'decision_maker';
+};
 
 const FaithfulnessBadge: React.FC<{ f: Faithfulness; kind: string }> = ({ f, kind }) => {
   const ok = !f.fabricated && !f.direction_errors;
@@ -37,6 +54,7 @@ const FaithfulnessBadge: React.FC<{ f: Faithfulness; kind: string }> = ({ f, kin
 };
 
 export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 'Gemma via Ollama' }) => {
+  const [audience, setAudience] = useState<Audience>(readAudience);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streamingText, setStreamingText] = useState<string | null>(null);
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
@@ -54,13 +72,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 
     setPendingQuestion(question ?? null);
     try {
       const final = await explainService.chatStream(
-        explanationId, question, (t) => setStreamingText((prev) => (prev ?? '') + t), controller.signal
+        explanationId, audience, question, (t) => setStreamingText((prev) => (prev ?? '') + t), controller.signal
       );
       setMessages((prev) => {
         const next = [...prev];
         if (question) {
           next.push({
-            id: -Date.now(), role: 'user', kind: 'followup', content: question, created_at: new Date().toISOString(),
+            id: -Date.now(), role: 'user', kind: 'followup', audience, content: question, created_at: new Date().toISOString(),
           });
         }
         if (!next.some((m) => m.id === final.id)) next.push(final);
@@ -81,7 +99,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 
     setMessages([]);
     setError('');
     explainService
-      .getConversation(explanationId)
+      .getConversation(explanationId, audience)
       .then((conv) => {
         if (cancelled) return;
         setMessages(conv.messages);
@@ -93,7 +111,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 
       abortRef.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [explanationId]);
+  }, [explanationId, audience]);
+
+  const chooseAudience = (next: Audience) => {
+    setAudience(next);
+    try {
+      localStorage.setItem(AUDIENCE_KEY, next);
+    } catch {
+      // the choice just won't be remembered
+    }
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'nearest' });
@@ -112,14 +139,34 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ explanationId, llmLabel = 
 
   return (
     <div className="bg-slate-800/80 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col h-full min-h-[28rem]">
-      <div className="flex items-center justify-between pb-3 border-b border-slate-700 mb-3">
-        <h3 className="text-sm font-semibold text-slate-50 flex items-center gap-2">
-          <Bot size={18} className="text-primary-400" />
-          Grounded AI Narrative
-        </h3>
-        <span className="text-[11px] font-mono bg-primary-950 text-primary-300 border border-primary-800 px-2 py-0.5 rounded">
-          {llmLabel}
-        </span>
+      <div className="pb-3 border-b border-slate-700 mb-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-50 flex items-center gap-2">
+            <Bot size={18} className="text-primary-400" />
+            Grounded AI Narrative
+          </h3>
+          <span className="text-[11px] font-mono bg-primary-950 text-primary-300 border border-primary-800 px-2 py-0.5 rounded">
+            {llmLabel}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-[11px]">
+          <span className="text-slate-400">Written for</span>
+          <div className="flex bg-slate-900 border border-slate-700 rounded-lg p-0.5">
+            {AUDIENCES.map((a) => (
+              <button
+                key={a.value}
+                type="button"
+                title={a.hint}
+                onClick={() => chooseAudience(a.value)}
+                className={`px-2 py-1 rounded-md transition ${
+                  audience === a.value ? 'bg-primary-600 text-white' : 'text-slate-400 hover:text-slate-50'
+                }`}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-4 pr-1 max-h-[36rem]">

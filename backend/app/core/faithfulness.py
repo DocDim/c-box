@@ -7,7 +7,7 @@ rounding of an allowed value. This gives a measurable "zero fabricated values" r
 for the evaluation report instead of anecdotal review.
 """
 import re
-from typing import Any, Dict, Iterable, List, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 # group(1) = the number, group(2) = a trailing percent marker
 _NUMBER = re.compile(
@@ -54,7 +54,18 @@ def _allowed_values(payload: Dict[str, Any]) -> Tuple[Set[float], Set[float]]:
     for v in raw:
         plain.update({v, abs(v)})
     percent = {v * 100 for v in plain}
+    # Numbers the owner wrote in the model metadata ("refer above 70% risk") may be quoted as written
+    for text in _metadata_texts(payload.get("model_context") or {}):
+        for m in _NUMBER.finditer(text):
+            value = abs(float(m.group(1).replace(",", "").replace("−", "-")))
+            (percent if m.group(2) else plain).add(value)
     return plain, percent
+
+
+def _metadata_texts(context: Dict[str, Any]) -> List[str]:
+    texts = [v for v in context.values() if isinstance(v, str)]
+    texts += [v for v in (context.get("class_descriptions") or {}).values() if isinstance(v, str)]
+    return texts
 
 
 def _decimals(token: str) -> int:
@@ -80,18 +91,29 @@ def _strip_feature_names(text: str, names: List[str]) -> str:
     return text
 
 
-def _feature_aliases(name: str) -> List[str]:
-    return list({name, name.replace("_", " "), re.sub(r"\s*\(.*?\)", "", name).strip()})
+def _feature_aliases(name: str, label: Optional[str] = None) -> List[str]:
+    aliases = {name, name.replace("_", " "), re.sub(r"\s*\(.*?\)", "", name).strip()}
+    if label:
+        # Business label from the model's feature glossary ("ST segment depression")
+        aliases.update({label, re.sub(r"\s*\(.*?\)", "", label).strip()})
+    return list(aliases)
 
 
-def check_faithfulness(text: str, payload: Dict[str, Any], expect_sections: bool) -> Dict[str, Any]:
-    features: List[str] = [
-        f["feature"]
-        for key in ("top_positive_factors", "top_negative_factors")
-        for f in payload.get(key, [])
-    ]
+def check_faithfulness(
+    text: str,
+    payload: Dict[str, Any],
+    expect_sections: bool,
+    section_headings: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """
+    section_headings maps each semantic section key to the heading the audience's prompt
+    asked for; without it, the generic SECTION_PATTERNS are used.
+    """
+    factors = [f for key in ("top_positive_factors", "top_negative_factors") for f in payload.get(key, [])]
+    features: List[str] = [f["feature"] for f in factors]
+    aliases = {f["feature"]: _feature_aliases(f["feature"], f.get("label")) for f in factors}
     class_labels = list((payload.get("class_probabilities") or {}).keys())
-    names_to_strip = [a for f in features for a in _feature_aliases(f)] + list(
+    names_to_strip = [a for f in features for a in aliases[f]] + list(
         payload.get("all_feature_names", [])
     )
 
@@ -121,7 +143,7 @@ def check_faithfulness(text: str, payload: Dict[str, Any], expect_sections: bool
     lowered = text.lower()
     mentioned = [
         f for f in features
-        if any(alias.lower() in lowered for alias in _feature_aliases(f) if alias)
+        if any(alias.lower() in lowered for alias in aliases[f] if alias)
     ]
 
     result: Dict[str, Any] = {
@@ -133,21 +155,24 @@ def check_faithfulness(text: str, payload: Dict[str, Any], expect_sections: bool
         "features_mentioned": mentioned,
     }
     if expect_sections:
-        found = [name for name, pat in SECTION_PATTERNS.items() if pat.search(text)]
+        sections = _split_sections(text, section_headings)
+        if section_headings:
+            found = [key for key in section_headings if key in sections]
+        else:
+            found = [name for name, pat in SECTION_PATTERNS.items() if pat.search(text)]
         result["sections_found"] = found
         result["structure_complete"] = len(found) == len(SECTION_PATTERNS)
 
         # Direction check: a feature that lowers the prediction must not be presented as an
         # upward pressure, and vice versa. Catches sign errors even when no number is quoted.
-        sections = _split_sections(text)
         positives = [f["feature"] for f in payload.get("top_positive_factors", [])]
         negatives = [f["feature"] for f in payload.get("top_negative_factors", [])]
         misplaced = [
             {"feature": f, "section": "upward_pressures", "actual_effect": "lowers the prediction"}
-            for f in negatives if _mentions(sections.get("upward_pressures", ""), f)
+            for f in negatives if _mentions(sections.get("upward_pressures", ""), aliases[f])
         ] + [
             {"feature": f, "section": "mitigating_factors", "actual_effect": "raises the prediction"}
-            for f in positives if _mentions(sections.get("mitigating_factors", ""), f)
+            for f in positives if _mentions(sections.get("mitigating_factors", ""), aliases[f])
         ]
         result["misplaced_features"] = misplaced
         result["direction_errors"] = bool(misplaced)
@@ -159,14 +184,25 @@ _HEADING = re.compile(r"^\s*(?:#{1,4}\s*|\*\*)(.+?)(?:\*\*)?\s*:?\s*$")
 _HEADING_ORDER = ("mitigating_factors", "actionable_next_step", "upward_pressures", "executive_summary")
 
 
-def _split_sections(text: str) -> Dict[str, str]:
+def _normalize_heading(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _heading_key(heading: str, section_headings: Optional[Dict[str, str]]) -> Optional[str]:
+    if section_headings:
+        found = _normalize_heading(heading)
+        return next((k for k, h in section_headings.items() if _normalize_heading(h) in found), None)
+    return next((n for n in _HEADING_ORDER if SECTION_PATTERNS[n].search(heading)), None)
+
+
+def _split_sections(text: str, section_headings: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     """Maps each narrative section to its body, using the markdown heading lines."""
     sections: Dict[str, List[str]] = {}
     current = None
     for line in text.splitlines():
         heading = _HEADING.match(line)
         if heading:
-            label = next((n for n in _HEADING_ORDER if SECTION_PATTERNS[n].search(heading.group(1))), None)
+            label = _heading_key(heading.group(1), section_headings)
             if label:
                 current = label
                 sections.setdefault(current, [])
@@ -176,6 +212,6 @@ def _split_sections(text: str) -> Dict[str, str]:
     return {k: "\n".join(v) for k, v in sections.items()}
 
 
-def _mentions(text: str, feature: str) -> bool:
+def _mentions(text: str, aliases: List[str]) -> bool:
     lowered = text.lower()
-    return any(alias and alias.lower() in lowered for alias in _feature_aliases(feature))
+    return any(alias and alias.lower() in lowered for alias in aliases)

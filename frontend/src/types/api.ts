@@ -23,7 +23,22 @@ export interface ModelArtifact {
   feature_names?: string[] | null;
   class_labels?: string[] | null;
   background_dataset_id?: number | null;
+  /** Business context the LLM prompt layer uses (owner-edited). */
+  feature_glossary?: Record<string, string> | null;
+  outcome_description?: string | null;
+  class_descriptions?: Record<string, string> | null;
+  decision_context?: string | null;
 }
+
+export interface ModelMetadataUpdate {
+  feature_glossary: Record<string, string>;
+  outcome_description: string | null;
+  class_descriptions: Record<string, string>;
+  decision_context: string | null;
+}
+
+/** Reader the LLM narrative is written for. */
+export type Audience = 'decision_maker' | 'domain_analyst' | 'data_scientist';
 
 export interface SharedUser {
   user_id: number;
@@ -148,6 +163,7 @@ export interface ChatMessage {
   id: number;
   role: 'user' | 'assistant';
   kind: 'narrative' | 'followup';
+  audience?: Audience | null;
   content: string;
   llm_model?: string | null;
   latency_ms?: number | null;

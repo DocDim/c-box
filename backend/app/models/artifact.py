@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime, timezone
-from typing import List, Optional, TYPE_CHECKING
-from sqlalchemy import String, Integer, DateTime, ForeignKey, Enum, UniqueConstraint, JSON
+from typing import Dict, List, Optional, TYPE_CHECKING
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Enum, UniqueConstraint, JSON, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -40,6 +40,12 @@ class ModelArtifact(Base):
     feature_names: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
     task_type: Mapped[str] = mapped_column(String(32), default=TaskType.UNKNOWN.value, nullable=False)
     class_labels: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+
+    # Business metadata the prompt layer uses to speak the reader's language
+    feature_glossary: Mapped[Optional[Dict[str, str]]] = mapped_column(JSON, nullable=True)
+    outcome_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    class_descriptions: Mapped[Optional[Dict[str, str]]] = mapped_column(JSON, nullable=True)
+    decision_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Reference data used as the SHAP background distribution (FR-3.2)
     background_dataset_id: Mapped[Optional[int]] = mapped_column(

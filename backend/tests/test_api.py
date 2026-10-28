@@ -226,8 +226,8 @@ async def test_chat_is_grounded_on_stored_explanation(client, fake_ollama, iris_
                               headers=headers)).json()
 
     fake_ollama.reply = lambda body: (
-        "## Executive Summary\nProbability 100%.\n## Upward Pressures\nPetal length drove it.\n"
-        "## Mitigating Factors\nNone.\n## Actionable Next Step\nNo action; the invented 0.777 is suspicious."
+        "## Bottom Line\nProbability 100%.\n## What Is Driving This Result\nPetal length drove it.\n"
+        "## What Is Holding It Back\nNone.\n## Recommended Action\nNo action; the invented 0.777 is suspicious."
     )
     r = await client.post(f"{API}/explain/chat", json={"explanation_id": expl["explanation_id"]}, headers=headers)
     assert r.status_code == 200, r.text
@@ -262,6 +262,66 @@ async def test_followups_carry_conversation_history(client, fake_ollama, iris_rf
 
     conv = (await client.get(f"{API}/explain/{expl_id}/conversation", headers=headers)).json()
     assert [m["kind"] for m in conv["messages"]] == ["narrative", "followup", "followup", "followup", "followup"]
+
+
+async def test_each_audience_gets_its_own_prompt_and_thread(client, fake_ollama, iris_rf_path, iris_csv_path):
+    headers, model, ds = await _owner_with_model(client, iris_rf_path, iris_csv_path)
+    expl_id = (await client.post(f"{API}/explain/instance",
+                                 json={"model_id": model["id"], "dataset_id": ds["id"], "row_index": 0},
+                                 headers=headers)).json()["explanation_id"]
+    fake_ollama.reply = lambda body: (
+        "## Model Output\nX.\n## Positive Contributions\nY.\n## Negative Contributions\nZ.\n"
+        "## Diagnostics & Caveats\nW."
+    )
+    r = await client.post(f"{API}/explain/chat", json={"explanation_id": expl_id, "audience": "data_scientist"},
+                          headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["message"]["audience"] == "data_scientist"
+    assert r.json()["message"]["faithfulness"]["structure_complete"] is True
+    sent = fake_ollama.requests[-1]["messages"]
+    assert "data scientist" in sent[0]["content"] and "## Diagnostics & Caveats" in sent[1]["content"]
+    assert '"additivity_gap"' in sent[1]["content"]
+
+    # The decision-maker thread is separate: it triggers its own narrative
+    calls = len(fake_ollama.requests)
+    await client.post(f"{API}/explain/chat", json={"explanation_id": expl_id}, headers=headers)
+    assert len(fake_ollama.requests) == calls + 1
+    assert "## Recommended Action" in fake_ollama.requests[-1]["messages"][1]["content"]
+
+    conv = (await client.get(f"{API}/explain/{expl_id}/conversation", params={"audience": "data_scientist"},
+                             headers=headers)).json()
+    assert [m["audience"] for m in conv["messages"]] == ["data_scientist"]
+    r = await client.post(f"{API}/explain/chat", json={"explanation_id": expl_id, "audience": "intern"},
+                          headers=headers)
+    assert r.status_code == 422
+
+
+async def test_model_metadata_feeds_the_prompt(client, fake_ollama, iris_rf_path, iris_csv_path):
+    headers, model, ds = await _owner_with_model(client, iris_rf_path, iris_csv_path)
+    feature = model["feature_names"][2]
+    cls = model["class_labels"][0]
+    r = await client.put(f"{API}/models/{model['id']}/metadata", headers=headers, json={
+        "feature_glossary": {feature: "Petal length of the flower", model["feature_names"][0]: "  "},
+        "outcome_description": "Iris species of the specimen",
+        "class_descriptions": {cls: "Iris setosa"},
+        "decision_context": "Route the specimen to the matching greenhouse",
+    })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["feature_glossary"] == {feature: "Petal length of the flower"}  # blank entries dropped
+    assert body["class_descriptions"] == {cls: "Iris setosa"}
+
+    r = await client.put(f"{API}/models/{model['id']}/metadata", headers=headers,
+                         json={"feature_glossary": {"not_a_feature": "x"}})
+    assert r.status_code == 422
+
+    expl_id = (await client.post(f"{API}/explain/instance",
+                                 json={"model_id": model["id"], "dataset_id": ds["id"], "row_index": 0},
+                                 headers=headers)).json()["explanation_id"]
+    await client.post(f"{API}/explain/chat", json={"explanation_id": expl_id}, headers=headers)
+    context = fake_ollama.requests[-1]["messages"][1]["content"]
+    assert "Route the specimen to the matching greenhouse" in context
+    assert "Iris species of the specimen" in context
 
 
 async def test_chat_rejects_client_supplied_attributions(client, fake_ollama, iris_rf_path, iris_csv_path):
@@ -305,6 +365,12 @@ async def _shared_setup(client, iris_rf_path, iris_csv_path, role):
                           json={"user_email": "bob@example.com", "role": role}, headers=owner)
     assert r.status_code == 200, r.text
     return owner, other, model, ds
+
+
+async def test_only_the_owner_edits_model_metadata(client, iris_rf_path, iris_csv_path):
+    _, admin, model, _ = await _shared_setup(client, iris_rf_path, iris_csv_path, "ADMIN")
+    r = await client.put(f"{API}/models/{model['id']}/metadata", headers=admin, json={"decision_context": "x"})
+    assert r.status_code == 403
 
 
 async def test_viewer_can_predict_but_not_explain(client, iris_rf_path, iris_csv_path):

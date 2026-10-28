@@ -5,6 +5,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
 
 import httpx
 from app.config import settings
+from app.core.prompt_builder import Audience, PromptBuilder
 
 _UNIT_EXPLANATIONS = {
     "probability": (
@@ -19,41 +20,7 @@ _UNIT_EXPLANATIONS = {
     "raw model margin": "Baseline and contributions are on the model's internal score scale.",
 }
 
-SYSTEM_PROMPT_TEMPLATE = (
-    "You are an Explainable AI specialist in {domain}. You explain a machine learning model's "
-    "prediction to a non-technical decision-maker.\n"
-    "STRICT RULES:\n"
-    "1. Use ONLY the verified SHAP attributions in the JSON context. Do not invent features, values or causes.\n"
-    "2. Only quote numbers that appear in the context; round them rather than computing new ones.\n"
-    "3. A positive SHAP value pushed the prediction up, a negative one pushed it down. SHAP describes "
-    "the model's reasoning, not real-world causation; say so if asked about causes.\n"
-    "4. If the context cannot answer a question, say that plainly instead of guessing.\n"
-    "5. Write in clear, professional plain language."
-)
-
-NARRATIVE_INSTRUCTION = (
-    "Write the explanation under exactly these four markdown headings, in this order, "
-    "copying each heading line verbatim:\n"
-    "## Executive Summary\n"
-    "## Upward Pressures\n"
-    "## Mitigating Factors\n"
-    "## Actionable Next Step\n\n"
-    "Content for each section:\n"
-    "- Executive Summary: begin by restating 'prediction_summary' exactly as written, then add one sentence of interpretation.\n"
-    "- Upward Pressures: only the factors in 'top_positive_factors' (effect: raises the prediction).\n"
-    "- Mitigating Factors: only the factors in 'top_negative_factors' (effect: lowers the prediction). "
-    "If that list is empty, write that no feature lowered the prediction.\n"
-    "- Actionable Next Step: one practical recommendation for a decision-maker in this domain.\n"
-    "Never move a factor to the other section and never change the sign of a SHAP value."
-)
-
-FOLLOWUP_INSTRUCTION = (
-    "Answer the stakeholder's follow-up question directly in at most 150 words, using only the "
-    "context above. Do not repeat the four-part structure.\nQuestion: {question}"
-)
-
-
-def _prediction_summary(record: Any) -> str:
+def _prediction_summary(record: Any, prompt: PromptBuilder) -> str:
     """
     A ready-made, numerically correct sentence comparing prediction and baseline, so the LLM
     restates it instead of converting units itself (gemma:2b reported P = 1.0 as "1.0%").
@@ -61,7 +28,9 @@ def _prediction_summary(record: Any) -> str:
     delta = record.explained_output - record.base_value
     direction = "above" if delta >= 0 else "below"
     if record.task_type == "classification":
-        head = f"The model predicts class {record.predicted_class} with probability {record.prediction * 100:.1f}%."
+        outcome = prompt.metadata.class_label(record.predicted_class)
+        named = f"class {record.predicted_class}" + (f" ({outcome})" if outcome else "")
+        head = f"The model predicts {named} with probability {record.prediction * 100:.1f}%."
         if record.output_units == "probability":
             return (
                 f"{head} The baseline expectation for this class is {record.base_value * 100:.1f}%, "
@@ -77,10 +46,11 @@ def _prediction_summary(record: Any) -> str:
     )
 
 
-def build_context_payload(record: Any, domain_context: str, top_k: int) -> Dict[str, Any]:
+def build_context_payload(record: Any, prompt: PromptBuilder, top_k: int) -> Dict[str, Any]:
     """
     Packages a stored ExplanationRecord into the immutable JSON grounding payload (FR-4.1):
-    top-K upward and top-K downward factors plus the net effect of everything else.
+    top-K upward and top-K downward factors plus the net effect of everything else,
+    with the model's business metadata for the prompt's audience.
     """
     contributions: List[Dict[str, Any]] = list(record.feature_contributions)
     positive = sorted((c for c in contributions if c["shap_value"] > 0), key=lambda c: -c["shap_value"])
@@ -94,6 +64,7 @@ def build_context_payload(record: Any, domain_context: str, top_k: int) -> Dict[
         value = c["actual_value"]
         item = {
             "feature": c["feature"],
+            "label": prompt.metadata.feature_label(c["feature"]),
             "value": round(value, 4) if isinstance(value, float) else value,
             "shap": round(c["shap_value"], 4),
             # Explicit direction: small models misread signs (e.g. listing a +0.30 driver as -0.30)
@@ -104,11 +75,12 @@ def build_context_payload(record: Any, domain_context: str, top_k: int) -> Dict[
         return item
 
     payload: Dict[str, Any] = {
-        "domain": domain_context,
+        "domain": prompt.metadata.domain,
+        **prompt.context_extras(),
         "task_type": record.task_type,
         "output_units": record.output_units,
         "units_note": _UNIT_EXPLANATIONS.get(record.output_units, ""),
-        "prediction_summary": _prediction_summary(record),
+        "prediction_summary": _prediction_summary(record, prompt),
         "baseline_expectation": round(record.base_value, 4),
         "explained_output": round(record.explained_output, 4),
         "top_positive_factors": [_fmt(c) for c in positive[:top_k]],
@@ -124,6 +96,9 @@ def build_context_payload(record: Any, domain_context: str, top_k: int) -> Dict[
             payload["class_probabilities"] = {k: round(v, 4) for k, v in record.probabilities.items()}
     else:
         payload["predicted_value"] = round(record.prediction, 4)
+    if prompt.audience == Audience.DATA_SCIENTIST:
+        payload["explainer_type"] = record.explainer_type
+        payload["additivity_gap"] = float(f"{record.additivity_gap:.3g}")
     return payload
 
 
@@ -161,7 +136,7 @@ class OllamaGemmaService:
 
     def build_messages(
         self,
-        domain_context: str,
+        prompt: PromptBuilder,
         payload: Dict[str, Any],
         history: Sequence[ChatTurn],
         question: Optional[str],
@@ -172,11 +147,11 @@ class OllamaGemmaService:
         """
         context_block = "Context Data (verified SHAP attributions):\n" + json.dumps(payload, indent=2)
         has_narrative = any(t.kind == "narrative" and t.role == "assistant" for t in history)
-        opening = NARRATIVE_INSTRUCTION if (has_narrative or question is None) else (
+        opening = prompt.narrative_instruction() if (has_narrative or question is None) else (
             "Use this context to answer the stakeholder's questions."
         )
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT_TEMPLATE.format(domain=domain_context)},
+            {"role": "system", "content": prompt.system_prompt()},
             {"role": "user", "content": f"{context_block}\n\n{opening}"},
         ]
         if question is None:
@@ -185,9 +160,9 @@ class OllamaGemmaService:
             if turn.role == "assistant":
                 messages.append({"role": "assistant", "content": turn.content})
             elif turn.kind == "followup":
-                messages.append({"role": "user", "content": FOLLOWUP_INSTRUCTION.format(question=turn.content)})
+                messages.append({"role": "user", "content": prompt.followup_instruction(turn.content)})
         if question is not None:
-            messages.append({"role": "user", "content": FOLLOWUP_INSTRUCTION.format(question=question)})
+            messages.append({"role": "user", "content": prompt.followup_instruction(question)})
         return messages
 
     async def stream_chat(self, messages: List[Dict[str, str]], stats: GenerationStats) -> AsyncIterator[str]:

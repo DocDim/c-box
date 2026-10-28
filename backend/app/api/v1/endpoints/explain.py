@@ -27,6 +27,7 @@ from app.core.llm_service import (
     build_context_payload,
     llm_service,
 )
+from app.core.prompt_builder import DEFAULT_AUDIENCE, Audience, ModelMetadata, PromptBuilder
 from app.core.permissions import verify_dataset_access, verify_model_access
 
 router = APIRouter(prefix="/explain", tags=["Explainability Engine"])
@@ -163,14 +164,17 @@ async def _load_owned_explanation(
     return record, model
 
 
-async def _load_history(explanation_id: str, db: AsyncSession) -> List[ChatMessage]:
-    return list((await db.execute(
+async def _load_history(explanation_id: str, audience: Audience, db: AsyncSession) -> List[ChatMessage]:
+    """The conversation thread for one audience (rows without one predate audiences)."""
+    messages = (await db.execute(
         select(ChatMessage).where(ChatMessage.explanation_id == explanation_id).order_by(ChatMessage.id)
-    )).scalars().all())
+    )).scalars().all()
+    return [m for m in messages if (m.audience or DEFAULT_AUDIENCE.value) == audience.value]
 
 
 async def _persist_turn(
     explanation_id: str,
+    audience: Audience,
     question: Optional[str],
     stats: GenerationStats,
     faithfulness: dict,
@@ -179,12 +183,14 @@ async def _persist_turn(
     async with AsyncSessionLocal() as session:
         if question is not None:
             session.add(ChatMessage(
-                explanation_id=explanation_id, role="user", kind="followup", content=question
+                explanation_id=explanation_id, role="user", kind="followup",
+                audience=audience.value, content=question,
             ))
         assistant = ChatMessage(
             explanation_id=explanation_id,
             role="assistant",
             kind="followup" if question is not None else "narrative",
+            audience=audience.value,
             content=stats.text,
             llm_model=stats.model,
             latency_ms=stats.latency_ms,
@@ -199,18 +205,25 @@ async def _persist_turn(
 
 async def _prepare_chat(payload: ChatRequest, user: User, db: AsyncSession):
     record, model = await _load_owned_explanation(payload.explanation_id, user, db)
-    history = await _load_history(record.id, db)
+    history = await _load_history(record.id, payload.audience, db)
     existing_narrative = next(
         (m for m in history if m.role == "assistant" and m.kind == "narrative"), None
     )
-    context = build_context_payload(record, model.domain_context, settings.LLM_TOP_K_FEATURES)
+    prompt = PromptBuilder(ModelMetadata.from_artifact(model), payload.audience)
+    context = build_context_payload(record, prompt, settings.LLM_TOP_K_FEATURES)
     messages = llm_service.build_messages(
-        model.domain_context,
+        prompt,
         context,
         [ChatTurn(role=m.role, kind=m.kind, content=m.content) for m in history],
         payload.question,
     )
-    return record, context, messages, existing_narrative
+    return record, prompt, context, messages, existing_narrative
+
+
+def _check(text: str, context: dict, prompt: PromptBuilder, question: Optional[str]) -> dict:
+    return check_faithfulness(
+        text, context, expect_sections=question is None, section_headings=prompt.section_headings
+    )
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -223,7 +236,7 @@ async def chat(
     Grounded narrative (no question) or multi-turn follow-up (FR-4.1 - FR-4.4).
     Every answer is scored by the automated faithfulness checker.
     """
-    record, context, messages, existing = await _prepare_chat(payload, current_user, db)
+    record, prompt, context, messages, existing = await _prepare_chat(payload, current_user, db)
     if payload.question is None and existing is not None:
         return ChatResponse(explanation_id=record.id, message=ChatMessageResponse.model_validate(existing))
 
@@ -232,8 +245,8 @@ async def chat(
     except LLMUnavailableError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
-    faithfulness = check_faithfulness(stats.text, context, expect_sections=payload.question is None)
-    message = await _persist_turn(record.id, payload.question, stats, faithfulness)
+    faithfulness = _check(stats.text, context, prompt, payload.question)
+    message = await _persist_turn(record.id, payload.audience, payload.question, stats, faithfulness)
     return ChatResponse(explanation_id=record.id, message=ChatMessageResponse.model_validate(message))
 
 
@@ -248,7 +261,7 @@ async def chat_stream(
     current_user: User = Depends(get_current_user)
 ):
     """Server-Sent Events variant of /chat: streams tokens as Gemma produces them (NFR-3)."""
-    record, context, messages, existing = await _prepare_chat(payload, current_user, db)
+    record, prompt, context, messages, existing = await _prepare_chat(payload, current_user, db)
 
     async def events() -> AsyncIterator[str]:
         if payload.question is None and existing is not None:
@@ -261,8 +274,8 @@ async def chat_stream(
         except LLMUnavailableError as e:
             yield _sse("error", {"detail": str(e)})
             return
-        faithfulness = check_faithfulness(stats.text, context, expect_sections=payload.question is None)
-        message = await _persist_turn(record.id, payload.question, stats, faithfulness)
+        faithfulness = _check(stats.text, context, prompt, payload.question)
+        message = await _persist_turn(record.id, payload.audience, payload.question, stats, faithfulness)
         yield _sse("done", ChatMessageResponse.model_validate(message).model_dump(mode="json"))
 
     return StreamingResponse(
@@ -285,11 +298,12 @@ async def get_explanation(
 @router.get("/{explanation_id}/conversation", response_model=ConversationResponse)
 async def get_conversation(
     explanation_id: str,
+    audience: Audience = Query(DEFAULT_AUDIENCE),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     record, _ = await _load_owned_explanation(explanation_id, current_user, db)
-    history = await _load_history(record.id, db)
+    history = await _load_history(record.id, audience, db)
     return ConversationResponse(
         explanation_id=record.id,
         messages=[ChatMessageResponse.model_validate(m) for m in history],

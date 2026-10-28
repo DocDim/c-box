@@ -6,6 +6,7 @@ import { BackgroundDataCard } from '../components/models/BackgroundDataCard';
 import { canManage, fmtDate } from '../utils/format';
 import { RegisterModelForm } from '../components/models/RegisterModelForm';
 import { SharingPanel } from '../components/models/SharingPanel';
+import { ModelMetadataPanel } from '../components/models/ModelMetadataPanel';
 
 interface ModelsPageProps {
   models: ModelArtifact[];
@@ -112,6 +113,11 @@ export const ModelsPage: React.FC<ModelsPageProps> = ({
                         )}
                       </div>
                       <SharingPanel model={m} />
+                      {m.is_owner && (
+                        <div className="lg:col-span-2">
+                          <ModelMetadataPanel model={m} onModelUpdated={onModelUpdated} />
+                        </div>
+                      )}
                     </div>
                   )}
                 </li>

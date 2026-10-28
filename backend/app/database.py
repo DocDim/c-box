@@ -49,6 +49,13 @@ _ADDED_COLUMNS = {
         "class_labels": "JSON",
         "file_format": "VARCHAR(16) NOT NULL DEFAULT 'joblib'",
         "background_dataset_id": "INTEGER REFERENCES datasets(id) ON DELETE SET NULL",
+        "feature_glossary": "JSON",
+        "outcome_description": "TEXT",
+        "class_descriptions": "JSON",
+        "decision_context": "TEXT",
+    },
+    "chat_messages": {
+        "audience": "VARCHAR(32)",
     },
     "datasets": {
         "purpose": "VARCHAR(16) NOT NULL DEFAULT 'evaluation'",

@@ -1,7 +1,7 @@
 import csv
 import io
 import json
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 from fastapi import APIRouter, Depends, Query
@@ -18,6 +18,7 @@ from app.schemas.audit import AuditExplanation, AuditListResponse, AuditMetricsR
 from app.schemas.chat import ChatMessageResponse
 from app.core.dependencies import get_current_user
 from app.core.permissions import verify_model_access
+from app.core.prompt_builder import DEFAULT_AUDIENCE
 
 router = APIRouter(prefix="/audit", tags=["Audit & Evaluation"])
 
@@ -144,7 +145,7 @@ async def export_csv(
     writer.writerow([
         "explanation_id", "created_at", "user_email", "explainer_type", "task_type", "predicted_class",
         "prediction", "base_value", "output_units", "additivity_gap", "shap_ms", "input_hash",
-        "message_kind", "question", "llm_model", "llm_latency_ms", "llm_ttft_ms",
+        "message_kind", "audience", "question", "llm_model", "llm_latency_ms", "llm_ttft_ms",
         "numbers_checked", "numbers_verified", "fabricated", "structure_complete", "direction_errors",
         "misplaced_features", "features_mentioned", "answer",
     ])
@@ -156,16 +157,18 @@ async def export_csv(
         ]
         answers = [m for m in record.messages if m.role == "assistant"]
         if not answers:
-            writer.writerow(base + [""] * 13)
+            writer.writerow(base + [""] * 14)
             continue
-        last_question: Optional[str] = None
+        # Each audience is its own thread, so questions are paired per audience
+        last_question: Dict[str, str] = {}
         for m in record.messages:
+            audience = m.audience or DEFAULT_AUDIENCE.value
             if m.role == "user":
-                last_question = m.content
+                last_question[audience] = m.content
                 continue
             f = m.faithfulness or {}
             writer.writerow(base + [
-                m.kind, last_question if m.kind == "followup" else "", m.llm_model,
+                m.kind, audience, last_question.get(audience, "") if m.kind == "followup" else "", m.llm_model,
                 round(m.latency_ms or 0, 2), round(m.ttft_ms or 0, 2) if m.ttft_ms else "",
                 f.get("numbers_checked"), f.get("numbers_verified"), f.get("fabricated"),
                 f.get("structure_complete", ""), f.get("direction_errors", ""),

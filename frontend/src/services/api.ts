@@ -1,5 +1,6 @@
 import axios from 'axios';
 import {
+  Audience,
   AuditList,
   BatchPredictResponse,
   AuditMetrics,
@@ -12,6 +13,7 @@ import {
   InstanceExplainResponse,
   InstanceSource,
   ModelArtifact,
+  ModelMetadataUpdate,
   PredictResponse,
   Role,
   SharedUser,
@@ -101,6 +103,10 @@ export const modelService = {
   revokeShare: async (modelId: number, userId: number): Promise<void> => {
     await api.delete(`/models/${modelId}/share/${userId}`);
   },
+  /** Owner-only: business context used to adapt LLM narratives to their reader. */
+  updateMetadata: async (modelId: number, metadata: ModelMetadataUpdate): Promise<ModelArtifact> => {
+    return (await api.put(`/models/${modelId}/metadata`, metadata)).data;
+  },
 };
 
 export const datasetService = {
@@ -141,16 +147,17 @@ export const explainService = {
       params: { max_samples: maxSamples, class_index: classIndex },
     })).data;
   },
-  getConversation: async (explanationId: string): Promise<ConversationResponse> => {
-    return (await api.get(`/explain/${explanationId}/conversation`)).data;
+  getConversation: async (explanationId: string, audience: Audience): Promise<ConversationResponse> => {
+    return (await api.get(`/explain/${explanationId}/conversation`, { params: { audience } })).data;
   },
 
   /**
-   * Streams a grounded narrative (question omitted) or follow-up answer over SSE.
-   * Calls onToken for every token and resolves with the persisted message.
+   * Streams a grounded narrative (question omitted) or follow-up answer over SSE, written
+   * for the given audience. Calls onToken for every token and resolves with the persisted message.
    */
   chatStream: async (
     explanationId: string,
+    audience: Audience,
     question: string | undefined,
     onToken: (text: string) => void,
     signal?: AbortSignal
@@ -158,7 +165,7 @@ export const explainService = {
     const res = await fetch(`${API_BASE}/explain/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ explanation_id: explanationId, question }),
+      body: JSON.stringify({ explanation_id: explanationId, question, audience }),
       signal,
     });
     if (!res.ok || !res.body) {

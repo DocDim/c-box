@@ -12,11 +12,18 @@ from app.core.llm_service import (
     OllamaGemmaService,
     build_context_payload,
 )
+from app.core.prompt_builder import Audience, ModelMetadata, PromptBuilder
+
+
+def _prompt(domain="Clinical Cardiology", audience=Audience.DECISION_MAKER, **meta):
+    return PromptBuilder(ModelMetadata(domain=domain, **meta), audience)
 
 
 def _record(**overrides):
     base = dict(
         task_type="classification",
+        explainer_type="TreeExplainer",
+        additivity_gap=1.2e-7,
         output_units="probability",
         base_value=0.354,
         explained_output=0.842,
@@ -38,7 +45,7 @@ def _record(**overrides):
 
 @pytest.fixture
 def payload():
-    return build_context_payload(_record(), "Clinical Cardiology", top_k=2)
+    return build_context_payload(_record(), _prompt(), top_k=2)
 
 
 def test_context_payload_splits_top_k_and_keeps_remainder(payload):
@@ -54,7 +61,7 @@ def test_regression_payload_has_predicted_value():
     p = build_context_payload(
         _record(task_type="regression", output_units="target units", predicted_class=None,
                 explained_class=None, probabilities=None, prediction=151.2),
-        "Real Estate", top_k=3,
+        _prompt("Real Estate"), top_k=3,
     )
     assert p["predicted_value"] == 151.2
     assert "predicted_class" not in p
@@ -63,9 +70,9 @@ def test_regression_payload_has_predicted_value():
 def test_narrative_messages_contain_only_context_and_instruction(payload):
     service = OllamaGemmaService()
     history = [ChatTurn("assistant", "narrative", "old narrative")]
-    messages = service.build_messages("Cardiology", payload, history, None)
+    messages = service.build_messages(_prompt(), payload, history, None)
     assert [m["role"] for m in messages] == ["system", "user"]
-    assert "Executive Summary" in messages[1]["content"]
+    assert "## Bottom Line" in messages[1]["content"]
     assert "st_depression" in messages[1]["content"]
 
 
@@ -76,7 +83,7 @@ def test_followup_messages_replay_history(payload):
         ChatTurn("user", "followup", "Q1"),
         ChatTurn("assistant", "followup", "A1"),
     ]
-    messages = service.build_messages("Cardiology", payload, history, "Q2")
+    messages = service.build_messages(_prompt(), payload, history, "Q2")
     assert [m["role"] for m in messages] == ["system", "user", "assistant", "user", "assistant", "user"]
     assert "Q1" in messages[3]["content"] and "Q2" in messages[5]["content"]
     assert messages[4]["content"] == "A1"
@@ -103,7 +110,7 @@ def test_faithfulness_flags_invented_numbers(payload):
 
 def test_faithfulness_percentages_must_match_scaled_values():
     # Regression: Gemma reported "1%" for a probability of 1.0 (i.e. 100%)
-    payload = build_context_payload(_record(prediction=1.0, explained_output=1.0), "Botany", top_k=2)
+    payload = build_context_payload(_record(prediction=1.0, explained_output=1.0), _prompt("Botany"), top_k=2)
     assert check_faithfulness("The probability is 1%.", payload, expect_sections=False)["fabricated"] is True
     assert check_faithfulness("The probability is 100%.", payload, expect_sections=False)["fabricated"] is False
     assert check_faithfulness("That is 100 percent.", payload, expect_sections=False)["fabricated"] is False
@@ -168,7 +175,7 @@ def test_prediction_summary_is_correct_and_passes_the_checker():
     # Mirrors the screenshot case: P(class 0) = 1.0 with a 0.35 baseline
     record = _record(prediction=1.0, explained_output=1.0, base_value=0.3497, predicted_class="0",
                      explained_class="0", probabilities={"0": 1.0, "1": 0.0, "2": 0.0})
-    payload = build_context_payload(record, "Botany", top_k=2)
+    payload = build_context_payload(record, _prompt("Botany"), top_k=2)
     summary = payload["prediction_summary"]
     assert "100.0%" in summary and "35.0%" in summary and "65.0 percentage points above" in summary
     assert check_faithfulness(summary, payload, expect_sections=False)["fabricated"] is False
@@ -190,12 +197,12 @@ def test_regression_and_log_odds_summaries():
     reg = build_context_payload(
         _record(task_type="regression", output_units="target units", predicted_class=None, explained_class=None,
                 probabilities=None, prediction=151.2, explained_output=151.2, base_value=152.1),
-        "Real Estate", top_k=2)
+        _prompt("Real Estate"), top_k=2)
     assert "151.2" in reg["prediction_summary"] and "below" in reg["prediction_summary"]
     assert check_faithfulness(reg["prediction_summary"], reg, expect_sections=False)["fabricated"] is False
 
     logodds = build_context_payload(_record(output_units="log-odds", explained_output=1.67, base_value=-0.6),
-                                    "Cardiology", top_k=2)
+                                    _prompt("Cardiology"), top_k=2)
     assert "above the baseline of -0.600" in logodds["prediction_summary"]
     assert "shap_percentage_points" not in logodds["top_positive_factors"][0]
 
@@ -222,3 +229,77 @@ def test_direction_check_passes_correct_narrative(payload):
     )
     result = check_faithfulness(text, payload, expect_sections=True)
     assert result["direction_errors"] is False and result["misplaced_features"] == []
+
+
+# --------------------------------------------------------------------------- prompt-engineering layer
+
+def test_each_audience_has_its_own_persona_and_headings():
+    seen = set()
+    for audience in Audience:
+        prompt = _prompt(audience=audience)
+        headings = tuple(prompt.section_headings.values())
+        assert set(prompt.section_headings) == {
+            "executive_summary", "upward_pressures", "mitigating_factors", "actionable_next_step"
+        }
+        assert all(f"## {h}" in prompt.narrative_instruction() for h in headings)
+        assert "STRICT RULES" in prompt.system_prompt()  # grounding rules are shared
+        seen.add(headings)
+    assert len(seen) == len(Audience)
+    assert "no data-science background" in _prompt().system_prompt()
+    assert "data scientist" in _prompt(audience=Audience.DATA_SCIENTIST).system_prompt()
+
+
+def test_followup_word_limit_depends_on_audience():
+    assert "at most 100 words" in _prompt().followup_instruction("Why?")
+    assert "at most 150 words" in _prompt(audience=Audience.DATA_SCIENTIST).followup_instruction("Why?")
+
+
+def test_metadata_reaches_the_payload():
+    prompt = _prompt(
+        model_name="Heart RF",
+        feature_glossary={"st_depression": "ST segment depression on ECG"},
+        outcome_description="Risk of heart disease",
+        class_descriptions={"1": "high cardiac risk"},
+        decision_context="Refer to a cardiologist or schedule routine follow-up",
+    )
+    payload = build_context_payload(_record(), prompt, top_k=2)
+    labels = {f["feature"]: f["label"] for f in payload["top_positive_factors"]}
+    assert labels == {"st_depression": "ST segment depression on ECG", "max_heart_rate": "max heart rate"}
+    assert "class 1 (high cardiac risk)" in payload["prediction_summary"]
+    assert payload["model_context"]["decision_context"].startswith("Refer to a cardiologist")
+    assert payload["audience"] == "Decision-maker"
+    assert "additivity_gap" not in payload
+
+
+def test_data_scientist_payload_has_diagnostics():
+    payload = build_context_payload(_record(), _prompt(audience=Audience.DATA_SCIENTIST), top_k=2)
+    assert payload["explainer_type"] == "TreeExplainer"
+    assert payload["additivity_gap"] == pytest.approx(1.2e-7)
+
+
+def test_faithfulness_uses_audience_headings_and_glossary_labels():
+    prompt = _prompt(feature_glossary={"st_depression": "ST segment depression", "age": "Patient age"})
+    payload = build_context_payload(_record(), prompt, top_k=2)
+    text = (
+        "## Bottom Line\nHigh risk.\n"
+        "## What Is Driving This Result\nPatient age pushed the result up.\n"
+        "## What Is Holding It Back\nST segment depression held it back.\n"
+        "## Recommended Action\nReview."
+    )
+    result = check_faithfulness(text, payload, expect_sections=True, section_headings=prompt.section_headings)
+    assert result["structure_complete"] is True
+    assert set(result["features_mentioned"]) == {"st_depression", "age"}
+    assert {(m["feature"], m["section"]) for m in result["misplaced_features"]} == {
+        ("age", "upward_pressures"), ("st_depression", "mitigating_factors")
+    }
+
+    # The generic patterns would not find these headings: the audience map is what makes them count
+    partial = check_faithfulness("## Bottom Line\nOnly this.", payload, True, prompt.section_headings)
+    assert partial["sections_found"] == ["executive_summary"] and partial["structure_complete"] is False
+
+
+def test_numbers_from_owner_metadata_are_not_flagged():
+    prompt = _prompt(decision_context="Refer when the risk exceeds 70%; re-test within 14 days.")
+    payload = build_context_payload(_record(), prompt, top_k=2)
+    result = check_faithfulness("Refer when risk exceeds 70% and re-test within 14 days.", payload, False)
+    assert result["fabricated"] is False, result
