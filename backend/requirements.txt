@@ -14,3 +14,5 @@ aiosqlite>=0.20.0
 pyjwt>=2.8.0
 pwdlib[bcrypt]>=0.2.0
 email-validator>=2.1.0
+# Safe (non-pickle) model format, recommended over .joblib/.pkl
+skops>=0.10.0

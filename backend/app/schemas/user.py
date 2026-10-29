@@ -1,12 +1,13 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 
 class UserBase(BaseModel):
     email: EmailStr
 
 class UserCreate(UserBase):
-    password: str
+    # bcrypt only uses the first 72 bytes of a password
+    password: str = Field(min_length=8, max_length=72)
 
 class UserResponse(UserBase):
     id: int

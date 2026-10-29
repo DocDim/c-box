@@ -2,9 +2,136 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Palette as RGB channels (see tailwind.config.js). Dark is the default; <html class="light"> remaps it. */
+:root {
+  --primary-50: 242 250 253;
+  --primary-100: 224 243 251;
+  --primary-200: 189 230 246;
+  --primary-300: 133 208 239;
+  --primary-400: 66 182 230;
+  --primary-500: 0 157 221;
+  --primary-600: 0 133 188;
+  --primary-700: 0 107 150;
+  --primary-800: 0 82 115;
+  --primary-900: 0 60 84;
+  --primary-950: 0 38 53;
+
+  --accent-50: 242 250 249;
+  --accent-100: 224 242 240;
+  --accent-200: 189 227 221;
+  --accent-300: 133 203 193;
+  --accent-400: 66 174 160;
+  --accent-500: 0 146 126;
+  --accent-600: 0 124 107;
+  --accent-700: 0 99 86;
+  --accent-800: 0 76 66;
+  --accent-900: 0 55 48;
+  --accent-950: 0 35 30;
+
+  --secondary-50: 254 249 243;
+  --secondary-100: 252 241 227;
+  --secondary-200: 248 225 193;
+  --secondary-300: 242 200 141;
+  --secondary-400: 235 171 80;
+  --secondary-500: 228 141 18;
+  --secondary-600: 194 120 15;
+  --secondary-700: 155 96 12;
+  --secondary-800: 119 73 9;
+  --secondary-900: 87 54 7;
+  --secondary-950: 55 34 4;
+
+  --rose-50: 255 241 242;
+  --rose-100: 255 228 230;
+  --rose-200: 254 205 211;
+  --rose-300: 253 164 175;
+  --rose-400: 251 113 133;
+  --rose-500: 244 63 94;
+  --rose-600: 225 29 72;
+  --rose-700: 190 18 60;
+  --rose-800: 159 18 57;
+  --rose-900: 136 19 55;
+  --rose-950: 76 5 25;
+
+  --slate-50: 248 250 252;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+  --slate-700: 51 65 85;
+  --slate-800: 30 41 59;
+  --slate-900: 15 23 42;
+  --slate-950: 2 6 23;
+}
+
+:root.light {
+  /* Neutrals: page/cards/inputs go light, text goes dark. */
+  --primary-50: 0 38 53;
+  --primary-100: 0 60 84;
+  --primary-200: 0 82 115;
+  --primary-300: 0 107 150;
+  --primary-400: 0 133 188;
+  --primary-500: 0 157 221;
+  --primary-600: 0 133 188;
+  --primary-700: 0 107 150;
+  --primary-800: 189 230 246;
+  --primary-900: 224 243 251;
+  --primary-950: 242 250 253;
+
+  --accent-50: 0 35 30;
+  --accent-100: 0 55 48;
+  --accent-200: 0 76 66;
+  --accent-300: 0 99 86;
+  --accent-400: 0 124 107;
+  --accent-500: 0 146 126;
+  --accent-600: 0 124 107;
+  --accent-700: 0 99 86;
+  --accent-800: 189 227 221;
+  --accent-900: 224 242 240;
+  --accent-950: 242 250 249;
+
+  --secondary-50: 55 34 4;
+  --secondary-100: 87 54 7;
+  --secondary-200: 119 73 9;
+  --secondary-300: 155 96 12;
+  --secondary-400: 194 120 15;
+  --secondary-500: 228 141 18;
+  --secondary-600: 194 120 15;
+  --secondary-700: 155 96 12;
+  --secondary-800: 248 225 193;
+  --secondary-900: 252 241 227;
+  --secondary-950: 254 249 243;
+
+  --rose-50: 76 5 25;
+  --rose-100: 136 19 55;
+  --rose-200: 159 18 57;
+  --rose-300: 190 18 60;
+  --rose-400: 225 29 72;
+  --rose-500: 244 63 94;
+  --rose-600: 225 29 72;
+  --rose-700: 190 18 60;
+  --rose-800: 254 205 211;
+  --rose-900: 255 228 230;
+  --rose-950: 255 241 242;
+
+  --slate-50: 2 6 23;
+  --slate-100: 15 23 42;
+  --slate-200: 30 41 59;
+  --slate-300: 51 65 85;
+  --slate-400: 71 85 105;
+  --slate-500: 100 116 139;
+  --slate-600: 203 213 225;
+  --slate-700: 226 232 240;
+  --slate-800: 255 255 255;
+  --slate-900: 248 250 252;
+  --slate-950: 255 255 255;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  background-color: #0f172a;
-  color: #f8fafc;
+  background-color: rgb(var(--slate-900));
+  color: rgb(var(--slate-50));
+  transition: background-color 0.2s, color 0.2s;
 }

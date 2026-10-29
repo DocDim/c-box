@@ -1,12 +1,12 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, upload, model_access, predict, explain, chat
+from app.api.v1.endpoints import auth, models, datasets, predict, explain, audit
 
 api_router = APIRouter(prefix="/api/v1")
 
-# Mount sub-routers
+# Mount sub-routers (routes follow SDD v1.0.0 section 3)
 api_router.include_router(auth.router)
-api_router.include_router(upload.router)
-api_router.include_router(model_access.router)
+api_router.include_router(models.router)
+api_router.include_router(datasets.router)
 api_router.include_router(predict.router)
 api_router.include_router(explain.router)
-api_router.include_router(chat.router)
+api_router.include_router(audit.router)

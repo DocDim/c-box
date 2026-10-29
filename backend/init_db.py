@@ -1,10 +1,8 @@
 import asyncio
-from app.database import engine, Base
-from app.models import User, ModelArtifact, ModelShare
+from app.database import init_models
 
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    await init_models()
     print("Database schema successfully initialized.")
 
 if __name__ == "__main__":
