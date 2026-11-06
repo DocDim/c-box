@@ -1,4 +1,4 @@
-# cbox: Hybrid SHAP + LLM Predictive Model Explainability Platform
+# c-box: Hybrid SHAP + LLM Predictive Model Explainability Platform
 
 A privacy-first Explainable AI (XAI) web platform that combines quantitative feature attributions from **SHAP (SHapley Additive exPlanations)** with grounded, plain-language explanations written by a local **Gemma** model running on **Ollama**.
 
